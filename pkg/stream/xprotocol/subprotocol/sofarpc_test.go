@@ -15,7 +15,7 @@ type base struct {
 	kind      uint8
 	code      uint16
 	ver2      uint8
-	requestId uint32
+	id        uint32
 	codec     uint8
 	className string
 	header    map[string]string
@@ -57,7 +57,7 @@ var v1Req = &v1Request{
 		kind:      1,
 		code:      1,
 		ver2:      1,
-		requestId: 1,
+		id:        1,
 		codec:     1,
 		className: "io.me.sofa",
 		header:    header,
@@ -72,7 +72,7 @@ var v1Res = &v1Response{
 		kind:      0,
 		code:      1,
 		ver2:      1,
-		requestId: 1,
+		id:        1,
 		codec:     1,
 		className: "io.me.sofa",
 		header:    header,
@@ -87,7 +87,7 @@ var v2Req = &v2Request{
 		kind:      1,
 		code:      1,
 		ver2:      1,
-		requestId: 1,
+		id:        1,
 		codec:     1,
 		className: "io.me.sofa",
 		header:    header,
@@ -104,7 +104,7 @@ var v2Res = &v2Response{
 		kind:      0,
 		code:      1,
 		ver2:      1,
-		requestId: 1,
+		id:        1,
 		codec:     1,
 		className: "io.me.sofa",
 		header:    header,
@@ -337,7 +337,7 @@ func buildV1Request(request *v1Request) []byte {
 	binary.Write(buffer, binary.BigEndian, request.kind)
 	binary.Write(buffer, binary.BigEndian, request.code)
 	binary.Write(buffer, binary.BigEndian, request.ver2)
-	binary.Write(buffer, binary.BigEndian, request.requestId)
+	binary.Write(buffer, binary.BigEndian, request.id)
 	binary.Write(buffer, binary.BigEndian, request.codec)
 	binary.Write(buffer, binary.BigEndian, request.timeout)
 	classBytes := []byte(request.className)
@@ -358,7 +358,7 @@ func buildV1Response(response *v1Response) []byte {
 	binary.Write(buffer, binary.BigEndian, response.kind)
 	binary.Write(buffer, binary.BigEndian, response.code)
 	binary.Write(buffer, binary.BigEndian, response.ver2)
-	binary.Write(buffer, binary.BigEndian, response.requestId)
+	binary.Write(buffer, binary.BigEndian, response.id)
 	binary.Write(buffer, binary.BigEndian, response.codec)
 	binary.Write(buffer, binary.BigEndian, response.status)
 	classBytes := []byte(response.className)
@@ -380,7 +380,7 @@ func buildV2Request(request *v2Request) []byte {
 	binary.Write(buffer, binary.BigEndian, request.kind)
 	binary.Write(buffer, binary.BigEndian, request.code)
 	binary.Write(buffer, binary.BigEndian, request.ver2)
-	binary.Write(buffer, binary.BigEndian, request.requestId)
+	binary.Write(buffer, binary.BigEndian, request.id)
 	binary.Write(buffer, binary.BigEndian, request.codec)
 	binary.Write(buffer, binary.BigEndian, request.switcher)
 	binary.Write(buffer, binary.BigEndian, request.timeout)
@@ -403,7 +403,7 @@ func buildV2Response(res *v2Response) []byte {
 	binary.Write(buffer, binary.BigEndian, res.kind)
 	binary.Write(buffer, binary.BigEndian, res.code)
 	binary.Write(buffer, binary.BigEndian, res.ver2)
-	binary.Write(buffer, binary.BigEndian, res.requestId)
+	binary.Write(buffer, binary.BigEndian, res.id)
 	binary.Write(buffer, binary.BigEndian, res.codec)
 	binary.Write(buffer, binary.BigEndian, res.switcher)
 	binary.Write(buffer, binary.BigEndian, res.status)

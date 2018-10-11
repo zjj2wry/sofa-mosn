@@ -34,13 +34,15 @@ func init() {
 }
 
 const (
+	// ServiceKey is the name of service name entry in the headers
 	ServiceKey = "sofa_head_target_service"
+	// MethodKey is the name of method name entry in the headers
 	MethodKey  = "sofa_head_method_name"
 )
 
 var (
-	unknownProtocolError   = fmt.Errorf("unknown protocol")
-	unKnowRequestTypeError = fmt.Errorf("unknow request type")
+	errUnknownProtocol = fmt.Errorf("unknown protocol")
+	errUnknownType     = fmt.Errorf("unknow type")
 )
 
 type sofaCodecFactory struct{}
@@ -102,22 +104,22 @@ func (codec *sofaCodec) GetStreamID(data []byte) string {
 
 // SetStreamID sets stream id of the request or response to a new value
 func (codec *sofaCodec) SetStreamID(data []byte, streamID string) []byte {
-	requestId, err := strconv.ParseUint(streamID, 10, 64)
+	id, err := strconv.ParseUint(streamID, 10, 64)
 	if err != nil {
 		return data
 	}
 
 	buffer := new(bytes.Buffer)
-	err = binary.Write(buffer, binary.BigEndian, uint32(requestId))
+	err = binary.Write(buffer, binary.BigEndian, uint32(id))
 	if err != nil {
 		return data
 	}
 
 	if m, ok, _ := codec.detectFrame(data); ok {
-		requestIdBytes := buffer.Bytes()
-		for i := 0; i < len(requestIdBytes) && i < 4; i++ {
+		idBytes := buffer.Bytes()
+		for i := 0; i < len(idBytes) && i < 4; i++ {
 			offset := m.requestIDIdx + i
-			data[offset] = requestIdBytes[i]
+			data[offset] = idBytes[i]
 		}
 	}
 
@@ -179,7 +181,7 @@ func (codec *sofaCodec) detectFrame(data []byte) (meta *frameMeta, ready bool, e
 		case sofarpc.RESPONSE:
 			headLen = 20
 		default:
-			err = unKnowRequestTypeError
+			err = errUnknownType
 		}
 	case sofarpc.BOLT_V2:
 		kind := data[2]
@@ -190,10 +192,10 @@ func (codec *sofaCodec) detectFrame(data []byte) (meta *frameMeta, ready bool, e
 		case sofarpc.RESPONSE:
 			headLen = 22
 		default:
-			err = unKnowRequestTypeError
+			err = errUnknownType
 		}
 	default:
-		err = unknownProtocolError
+		err = errUnknownProtocol
 	}
 	// 20 is the min head length
 	if headLen >= 20 {
