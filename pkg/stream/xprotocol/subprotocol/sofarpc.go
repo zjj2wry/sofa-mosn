@@ -22,10 +22,11 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"strconv"
+
 	"github.com/alipay/sofa-mosn/pkg/protocol/serialize"
 	"github.com/alipay/sofa-mosn/pkg/protocol/sofarpc"
 	"github.com/alipay/sofa-mosn/pkg/types"
-	"strconv"
 )
 
 func init() {
@@ -33,18 +34,18 @@ func init() {
 }
 
 const (
-	ServiceKey 	 = "sofa_head_target_service"
-	MethodKey 	 = "sofa_head_method_name"
+	ServiceKey = "sofa_head_target_service"
+	MethodKey  = "sofa_head_method_name"
 )
 
 var (
-	unknownProtocolError = fmt.Errorf("unknown protocol")
+	unknownProtocolError   = fmt.Errorf("unknown protocol")
 	unKnowRequestTypeError = fmt.Errorf("unknow request type")
 )
 
-type sofaCodecFactory struct {}
+type sofaCodecFactory struct{}
 
-type sofaCodec struct {}
+type sofaCodec struct{}
 
 func newCodecFactory() CodecFactory {
 	return &sofaCodecFactory{}
@@ -60,10 +61,10 @@ func (factory *sofaCodecFactory) CreateSubProtocolCodec(context context.Context)
 
 type frameMeta struct {
 	requestIDIdx int
-	headLen int
-	classLen int
-	headerLen int
-	contentLen int
+	headLen      int
+	classLen     int
+	headerLen    int
+	contentLen   int
 }
 
 func (m *frameMeta) frameLen() int {
@@ -77,7 +78,7 @@ func (codec *sofaCodec) SplitFrame(data []byte) [][]byte {
 	for len(fb) > 20 {
 		if m, ok, _ := codec.detectFrame(fb); ok {
 			l := m.frameLen()
-			frame := fb[: l]
+			frame := fb[:l]
 			fb = fb[l:]
 			frames = append(frames, frame)
 		} else {
@@ -88,7 +89,7 @@ func (codec *sofaCodec) SplitFrame(data []byte) [][]byte {
 }
 
 // GetStreamID gets stream id of a request or a response
-func (codec *sofaCodec)  GetStreamID(data []byte) string {
+func (codec *sofaCodec) GetStreamID(data []byte) string {
 
 	if m, ok, _ := codec.detectFrame(data); ok {
 		i := m.requestIDIdx
@@ -143,13 +144,12 @@ func (codec *sofaCodec) GetMethodName(data []byte) string {
 	return ""
 }
 
-
 // GetMetas returns header as map
 func (codec *sofaCodec) GetMetas(data []byte) map[string]string {
 	header := make(map[string]string)
 	if m, ok, _ := codec.detectFrame(data); ok {
 		headerIdx := m.headLen + m.classLen
-		headerBytes := data[headerIdx : headerIdx + m.headerLen]
+		headerBytes := data[headerIdx : headerIdx+m.headerLen]
 		serialize.Instance.DeSerialize(headerBytes, &header)
 	}
 	return header
@@ -160,7 +160,7 @@ func (codec *sofaCodec) Convert(data []byte) (map[string]string, []byte) {
 	var body []byte
 	if m, ok, _ := codec.detectFrame(data); ok {
 		contentIdx := m.headLen + m.classLen + m.headerLen
-		body = data[contentIdx : contentIdx + m.contentLen]
+		body = data[contentIdx : contentIdx+m.contentLen]
 	}
 	header := codec.GetMetas(data)
 	return header, body
@@ -203,10 +203,10 @@ func (codec *sofaCodec) detectFrame(data []byte) (meta *frameMeta, ready bool, e
 		frameLen := headLen + int(classLen) + int(headerLen) + int(contentLen)
 		meta = &frameMeta{
 			requestIDIdx: idx,
-			headLen: headLen,
-			classLen: int(classLen),
-			headerLen: int(headerLen),
-			contentLen: int(contentLen),
+			headLen:      headLen,
+			classLen:     int(classLen),
+			headerLen:    int(headerLen),
+			contentLen:   int(contentLen),
 		}
 		ready = frameLen > 0 && frameLen <= len(data)
 	}

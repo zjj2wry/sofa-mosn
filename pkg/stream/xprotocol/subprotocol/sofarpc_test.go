@@ -3,10 +3,11 @@ package subprotocol
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/alipay/sofa-mosn/pkg/protocol/serialize"
-	"github.com/alipay/sofa-mosn/pkg/types"
 	"strconv"
 	"testing"
+
+	"github.com/alipay/sofa-mosn/pkg/protocol/serialize"
+	"github.com/alipay/sofa-mosn/pkg/types"
 )
 
 type base struct {
@@ -46,8 +47,8 @@ type v2Response struct {
 }
 
 var header = map[string]string{
-	ServiceKey:  "io.sofa.target",
-	MethodKey: "say",
+	ServiceKey: "io.sofa.target",
+	MethodKey:  "say",
 }
 
 var v1Req = &v1Request{
@@ -92,9 +93,9 @@ var v2Req = &v2Request{
 		header:    header,
 		content:   "hello",
 	},
-	ver1: 1,
+	ver1:     1,
 	switcher: 1,
-	timeout: 8,
+	timeout:  8,
 }
 
 var v2Res = &v2Response{
@@ -109,9 +110,9 @@ var v2Res = &v2Response{
 		header:    header,
 		content:   "hello",
 	},
-	ver1: 1,
+	ver1:     1,
 	switcher: 1,
-	status: 8,
+	status:   8,
 }
 
 func TestSofaCodec_SplitFrame(t *testing.T) {
@@ -128,7 +129,7 @@ func TestSofaCodec_SplitFrame_More(t *testing.T) {
 	data := buildV1Request(v1Req)
 	buffer := new(bytes.Buffer)
 	buffer.Write(data)
-	buffer.Write([]byte {1, 3, 4})
+	buffer.Write([]byte{1, 3, 4})
 	codec := newCodec()
 	frames := codec.SplitFrame(buffer.Bytes())
 
@@ -140,7 +141,7 @@ func TestSofaCodec_SplitFrame_More(t *testing.T) {
 func TestSofaCodec_SplitFrame_less(t *testing.T) {
 	data := buildV1Request(v1Req)
 	codec := newCodec()
-	frames := codec.SplitFrame(data[:len(data) - 5])
+	frames := codec.SplitFrame(data[:len(data)-5])
 
 	if len(frames) != 0 {
 		t.Errorf("expect no frame splited if it is not ready")
@@ -394,7 +395,6 @@ func buildV2Request(request *v2Request) []byte {
 	buffer.Write(contentBytes)
 	return buffer.Bytes()
 }
-
 
 func buildV2Response(res *v2Response) []byte {
 	buffer := new(bytes.Buffer)
