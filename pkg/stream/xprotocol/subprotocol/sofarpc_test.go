@@ -3,7 +3,6 @@ package subprotocol
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"strconv"
 	"testing"
 
@@ -127,14 +126,13 @@ func TestSofaCodec_SplitFrame(t *testing.T) {
 }
 
 func TestSofaCodec_SplitFrame_Min_Len(t *testing.T) {
-	data := []byte{}
-	fmt.Print(data[0])
-	// codec := newCodec()
-	// frames := codec.SplitFrame(data)
-	//
-	// if len(frames) != 1 {
-	// 	t.Errorf("v1 heart beat reponse should be split")
-	// }
+	data := buildV1HeartBeat(v1Res)
+	codec := newCodec()
+	frames := codec.SplitFrame(data)
+
+	if len(frames) != 1 {
+		t.Errorf("v1 heart beat reponse should be split")
+	}
 }
 
 func TestSofaCodec_SplitFrame_More(t *testing.T) {
@@ -323,8 +321,8 @@ func TestSofaCodec_Convert(t *testing.T) {
 
 	assertHeaders(headers, t)
 
-	if string(content) != "hello" {
-		t.Errorf("expect %s, but got %s", "hello", string(content))
+	if !bytes.Equal(content, data) {
+		t.Errorf("expect %s, but got %s", data, content)
 	}
 }
 
