@@ -3,6 +3,7 @@ package subprotocol
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -121,8 +122,19 @@ func TestSofaCodec_SplitFrame(t *testing.T) {
 	frames := codec.SplitFrame(data)
 
 	if len(frames) != 1 {
-		t.Fail()
+		t.Error("v1 request frame should be split")
 	}
+}
+
+func TestSofaCodec_SplitFrame_Min_Len(t *testing.T) {
+	data := []byte{}
+	fmt.Print(data[0])
+	// codec := newCodec()
+	// frames := codec.SplitFrame(data)
+	//
+	// if len(frames) != 1 {
+	// 	t.Errorf("v1 heart beat reponse should be split")
+	// }
 }
 
 func TestSofaCodec_SplitFrame_More(t *testing.T) {
@@ -329,6 +341,21 @@ func assertHeaders(headers map[string]string, t *testing.T) {
 	} else {
 		t.Errorf("expect %d entries, but got %d", 2, len(headers))
 	}
+}
+
+func buildV1HeartBeat(request *v1Response) []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, request.proto)
+	binary.Write(buffer, binary.BigEndian, request.kind)
+	binary.Write(buffer, binary.BigEndian, request.code)
+	binary.Write(buffer, binary.BigEndian, request.ver2)
+	binary.Write(buffer, binary.BigEndian, request.id)
+	binary.Write(buffer, binary.BigEndian, request.codec)
+	binary.Write(buffer, binary.BigEndian, request.status)
+	binary.Write(buffer, binary.BigEndian, uint16(0))
+	binary.Write(buffer, binary.BigEndian, uint16(0))
+	binary.Write(buffer, binary.BigEndian, uint32(0))
+	return buffer.Bytes()
 }
 
 func buildV1Request(request *v1Request) []byte {

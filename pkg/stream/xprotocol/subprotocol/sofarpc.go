@@ -77,7 +77,7 @@ func (m *frameMeta) frameLen() int {
 func (codec *sofaCodec) SplitFrame(data []byte) [][]byte {
 	frames := make([][]byte, 0)
 	fb := data[:]
-	for len(fb) > 20 {
+	for len(fb) >= 20 {
 		if m, ok, _ := codec.detectFrame(fb); ok {
 			l := m.frameLen()
 			frame := fb[:l]
@@ -159,13 +159,8 @@ func (codec *sofaCodec) GetMetas(data []byte) map[string]string {
 
 // Convert returns header as map and body as byte slice
 func (codec *sofaCodec) Convert(data []byte) (map[string]string, []byte) {
-	var body []byte
-	if m, ok, _ := codec.detectFrame(data); ok {
-		contentIdx := m.headLen + m.classLen + m.headerLen
-		body = data[contentIdx : contentIdx+m.contentLen]
-	}
 	header := codec.GetMetas(data)
-	return header, body
+	return header, data[:]
 }
 
 func (codec *sofaCodec) detectFrame(data []byte) (meta *frameMeta, ready bool, err error) {

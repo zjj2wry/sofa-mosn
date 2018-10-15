@@ -115,9 +115,6 @@ func (conn *streamConnection) Dispatch(buffer types.IoBuffer) {
 	requestList := conn.codec.SplitFrame(buffer.Bytes())
 	for _, request := range requestList {
 		headers := make(map[string]string)
-		// support dynamic route
-		headers[strings.ToLower(protocol.MosnHeaderHostKey)] = conn.connection.RemoteAddr().String()
-		headers[strings.ToLower(protocol.MosnHeaderPathKey)] = "/"
 		log.DefaultLogger.Tracef("before Dispatch on decode header")
 
 		requestLen := len(request)
@@ -129,6 +126,9 @@ func (conn *streamConnection) Dispatch(buffer types.IoBuffer) {
 			request = newData
 			headers = newHeaders
 		}
+		// support dynamic route
+		headers[strings.ToLower(protocol.MosnHeaderHostKey)] = conn.connection.RemoteAddr().String()
+		headers[strings.ToLower(protocol.MosnHeaderPathKey)] = "/"
 
 		// get stream id
 		streamID := ""
