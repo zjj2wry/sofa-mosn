@@ -5,12 +5,14 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/alipay/sofa-mosn)](https://goreportcard.com/report/github.com/alipay/sofa-mosn)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green.svg)
 
-[MOSN](docs/Introduction.md), the short name of Modular Observable Smart Network, is a powerful proxy acting as Service Mesh's data plane like Envoy but written in golang.
+MOSN, the short name of Modular Observable Smart Network, is a powerful proxy acting as Service Mesh's data plane like Envoy but written in golang.
 MOSN supports Envoy and Istio's APIs and can be integrated with Istio, and we use MOSN instead of Envoy in SOFAMesh.
 The initial version of MOSN was jointly contributed by Ant Financial and UC Business Unit of Alibaba, and we look forward to the community to participate in the
-follow-up development and build an open source boutique project together.
+follow-up development and build an open source excellent project together.
 
-## Core Competence
+## [MOSN Introduction](docs/Introduction.md)
+
+## Features
 
 + Integrated with Istio
     + Integrated with Istio version 1.0 and V4 API and can be run based on full dynamic resource configuration
@@ -21,7 +23,7 @@ follow-up development and build an open source boutique project together.
 + Multi-protocol support
     + HTTP/1.1，HTTP/2.0
     + SOFARPC
-    + Dubbo
+    + Dubbo(ongoing)
 + Routing support
     + Routing in form of virtual host
     + Routing with headers/url/prefix
@@ -47,31 +49,22 @@ follow-up development and build an open source boutique project together.
     + Support self-defined private protocol
     + Scalable Network/IO ，stream layer
     
-## Feature of Iterative Version
-* [Changelog](CHANGELOG.md)
- 
-## Architecture Design
-* [Reference](docs/design/README.md)
-
-## Quic Start
-* [Details](docs/develop/quickstart.md)
+## Quick Start
+* [Reference](docs/quickstart/Setup.md)
    
 ## Docs
-* [More here](docs/mosnCatalog.md)
+* [Catalog](docs/Catalog.md)
 
 ## Community
 * [Issues](https://github.com/alipay/sofa-mosn/issues)
 
+## Version
+* [Changelog](CHANGELOG.md)
+
 ## Contribution
 + [How to contribute the code](docs/develop/CONTRIBUTING.md)
-+ MOSN is still in its infancy with many capabilities need to be completed, and many bugs to be fixed.
-  So we welcome everyone to participate in and commit code in following but not limited aspect：
-   + Completing core routing function
-   + Outlier detection
-   + Tracing support
-   + HTTP/1.x, HTTP/2.0 performance optimization
-   + Flow control
-   
++ MOSN is still in its infancy with many capabilities need to be completed, so we welcome everyone to participate in and commit code together.
+
 ## Thanks
 Thanks to Google, IBM, Lyft for creating the Envoy and Istio system, so that MOSN has a very good reference and we can
 quickly land our own ideas.

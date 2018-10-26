@@ -25,10 +25,12 @@ import (
 
 	"github.com/alipay/sofa-mosn/pkg/api/v2"
 	"github.com/alipay/sofa-mosn/pkg/config"
+	_ "github.com/alipay/sofa-mosn/pkg/filter/network/connectionmanager"
 	"github.com/alipay/sofa-mosn/pkg/log"
 	"github.com/alipay/sofa-mosn/pkg/network"
-	"github.com/alipay/sofa-mosn/pkg/protocol"
+	"github.com/alipay/sofa-mosn/pkg/router"
 	"github.com/alipay/sofa-mosn/pkg/server"
+	"github.com/alipay/sofa-mosn/pkg/stats"
 	"github.com/alipay/sofa-mosn/pkg/types"
 	"github.com/alipay/sofa-mosn/pkg/upstream/cluster"
 	"github.com/alipay/sofa-mosn/pkg/xds"
@@ -38,6 +40,7 @@ import (
 type Mosn struct {
 	servers        []server.Server
 	clustermanager types.ClusterManager
+	routerManager  types.RouterManager
 }
 
 // NewMosn
@@ -84,6 +87,9 @@ func NewMosn(c *config.MOSNConfig) *Mosn {
 		m.clustermanager = cluster.NewClusterManager(nil, clusters, clusterMap, c.ClusterManager.AutoDiscovery, c.ClusterManager.RegistryUseHealthCheck)
 	}
 
+	// initialize the routerManager
+	m.routerManager = router.NewRouterManager()
+
 	for _, serverConfig := range c.Servers {
 		//1. server config prepare
 		//server config
@@ -108,7 +114,12 @@ func NewMosn(c *config.MOSNConfig) *Mosn {
 			for _, listenerConfig := range serverConfig.Listeners {
 				// parse ListenerConfig
 				lc := config.ParseListenerConfig(&listenerConfig, inheritListeners)
-				lc.DisableConnIo = listenerDisableIO(&lc.FilterChains[0])
+				lc.DisableConnIo = config.GetListenerDisableIO(&lc.FilterChains[0])
+
+				// parse routers from connection_manager filter and add it the routerManager
+				if routerConfig := config.ParseRouterConfiguration(&lc.FilterChains[0]); routerConfig.RouterConfigName != "" {
+					m.routerManager.AddOrUpdateRouters(routerConfig)
+				}
 
 				var nfcf []types.NetworkFilterChainFactory
 				var sfcf []types.StreamFilterChainFactory
@@ -125,7 +136,6 @@ func NewMosn(c *config.MOSNConfig) *Mosn {
 				if err != nil {
 					log.StartLogger.Fatalf("AddListener error:%s", err.Error())
 				}
-
 			}
 		}
 		m.servers = append(m.servers, srv)
@@ -145,6 +155,8 @@ func NewMosn(c *config.MOSNConfig) *Mosn {
 	network.TransferTimeout = server.GracefulTimeout
 	// transfer old mosn connections
 	go network.TransferServer(m.servers[0].Handler())
+	// transfer old mosn mertrics, none-block
+	go stats.TransferServer(server.GracefulTimeout, nil)
 
 	return m
 }
@@ -165,7 +177,7 @@ func (m *Mosn) Close() {
 }
 
 // Start mosn project
-// stap1. NewMosn
+// step1. NewMosn
 // step2. Start Mosn
 func Start(c *config.MOSNConfig, serviceCluster string, serviceNode string) {
 	log.StartLogger.Infof("start by config : %+v", c)
@@ -182,19 +194,6 @@ func Start(c *config.MOSNConfig, serviceCluster string, serviceNode string) {
 	////todo: daemon running
 	wg.Wait()
 	xdsClient.Stop()
-}
-
-func listenerDisableIO(c *v2.FilterChain) bool {
-	for _, f := range c.Filters {
-		if f.Name == v2.DEFAULT_NETWORK_FILTER {
-			if downstream, ok := f.Config["downstream_protocol"]; ok {
-				if downstream == string(protocol.HTTP2) || downstream == string(protocol.HTTP1) {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }
 
 type clusterManagerFilter struct {
@@ -218,6 +217,12 @@ func getInheritListeners() []*v2.Listener {
 			//because passed listeners fd's index starts from 3
 			fd := uintptr(3 + idx)
 			file := os.NewFile(fd, "")
+			if file == nil {
+				log.StartLogger.Errorf("create new file from fd %d failed", fd)
+				continue
+			}
+			defer file.Close()
+
 			fileListener, err := net.FileListener(file)
 			if err != nil {
 				log.StartLogger.Errorf("recover listener from fd %d failed: %s", fd, err)

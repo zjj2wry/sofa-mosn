@@ -21,10 +21,10 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"reflect"
 	"sync"
 
-	"reflect"
-
+	"github.com/alipay/sofa-mosn/pkg/admin"
 	"github.com/alipay/sofa-mosn/pkg/api/v2"
 	"github.com/alipay/sofa-mosn/pkg/log"
 	"github.com/alipay/sofa-mosn/pkg/proxy"
@@ -56,17 +56,18 @@ func NewClusterManager(sourceAddr net.Addr, clusters []v2.Cluster,
 	if clusterMangerInstance != nil {
 		return clusterMangerInstance
 	}
-	protocolConnPool := sync.Map{}
-	for k := range types.ConnPoolFactories {
-		protocolConnPool.Store(k, &sync.Map{})
-	}
 
 	clusterMangerInstance = &clusterManager{
 		sourceAddr:       sourceAddr,
 		primaryClusters:  sync.Map{},
-		protocolConnPool: protocolConnPool,
+		protocolConnPool: sync.Map{},
 		autoDiscovery:    true, //todo delete
 	}
+
+	for k := range types.ConnPoolFactories {
+		clusterMangerInstance.protocolConnPool.Store(k, &sync.Map{})
+	}
+
 	//init clusterMngInstance when run app
 	initClusterMngAdapterInstance(clusterMangerInstance)
 
@@ -112,15 +113,21 @@ type primaryCluster struct {
 func (cm *clusterManager) AddOrUpdatePrimaryCluster(cluster v2.Cluster) bool {
 	clusterName := cluster.Name
 
+	ok := false
 	if v, exist := cm.primaryClusters.Load(clusterName); exist {
 		if !v.(*primaryCluster).addedViaAPI {
 			return false
 		}
 		// update cluster
-		return cm.updateCluster(cluster, v.(*primaryCluster), true)
+		ok = cm.updateCluster(cluster, v.(*primaryCluster), true)
+	} else {
+		// add new cluster
+		ok = cm.loadCluster(cluster, true)
 	}
-	// add new cluster
-	return cm.loadCluster(cluster, true)
+	if ok {
+		admin.SetClusterConfig(clusterName, cluster)
+	}
+	return ok
 }
 
 func (cm *clusterManager) ClusterExist(clusterName string) bool {
@@ -232,6 +239,8 @@ func (cm *clusterManager) UpdateClusterHosts(clusterName string, priority uint32
 				hosts = append(hosts, NewHost(hc, pcc.Info()))
 			}
 			concretedCluster.UpdateHosts(hosts)
+			admin.SetHosts(clusterName, hostConfigs)
+
 			return nil
 		}
 

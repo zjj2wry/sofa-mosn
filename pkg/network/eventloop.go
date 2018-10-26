@@ -19,7 +19,6 @@ package network
 
 import (
 	"errors"
-	"log"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -43,17 +42,17 @@ var (
 )
 
 func init() {
-	for i := range eventLoopPool {
-		poller, err := netpoll.New(nil)
-		if err != nil {
-			log.Fatalln("create poller failed, caused by ", err)
-		}
-
-		eventLoopPool[i] = &eventLoop{
-			poller: poller,
-			conn:   make(map[uint64]*connEvent), //TODO init size
-		}
-	}
+	//for i := range eventLoopPool {
+	//	poller, err := netpoll.New(nil)
+	//	if err != nil {
+	//		log.Fatalln("create poller failed, caused by ", err)
+	//	}
+    //
+	//	eventLoopPool[i] = &eventLoop{
+	//		poller: poller,
+	//		conn:   make(map[uint64]*connEvent), //TODO init size
+	//	}
+	//}
 }
 
 func attach() *eventLoop {
