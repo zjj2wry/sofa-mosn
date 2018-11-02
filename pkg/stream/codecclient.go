@@ -67,6 +67,7 @@ func NewCodecClient(ctx context.Context, prot types.Protocol, connection types.C
 	connection.FilterManager().AddReadFilter(codecClient)
 	connection.SetNoDelay(true)
 
+
 	return codecClient
 }
 

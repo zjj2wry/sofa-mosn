@@ -38,6 +38,7 @@ type listener struct {
 	handOffRestoredDestinationConnections bool
 	cb                                    types.ListenerEventListener
 	rawl                                  *net.TCPListener
+	netl                                  net.Listener
 	logger                                log.Logger
 	config                                *v2.Listener
 }
@@ -171,18 +172,27 @@ func (l *listener) listen(lctx context.Context) error {
 
 	var rawl *net.TCPListener
 	if rawl, err = net.ListenTCP("tcp", l.localAddress.(*net.TCPAddr)); err != nil {
+		log.DefaultLogger.Errorf("listen error %v ", err)
 		return err
 	}
-
 	l.rawl = rawl
 
+	var netl net.Listener
+	if netl, err = net.Listen("unix", "/tmp/mosn-" +l.localAddress.String()); err != nil {
+		log.DefaultLogger.Errorf("listen us error %v ", err)
+		return err
+	}
+	l.netl = netl
 	return nil
 }
 
 func (l *listener) accept(lctx context.Context) error {
-	rawc, err := l.rawl.Accept()
+	//rawc, err := l.rawl.Accept()
+
+	rawc, err := l.netl.Accept()
 
 	if err != nil {
+		log.DefaultLogger.Errorf("accept error %v", err)
 		return err
 	}
 

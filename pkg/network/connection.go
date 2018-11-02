@@ -34,9 +34,9 @@ import (
 
 	"github.com/alipay/sofa-mosn/pkg/buffer"
 	"github.com/alipay/sofa-mosn/pkg/log"
+	"github.com/alipay/sofa-mosn/pkg/mtls"
 	"github.com/alipay/sofa-mosn/pkg/types"
 	"github.com/rcrowley/go-metrics"
-	"github.com/alipay/sofa-mosn/pkg/mtls"
 )
 
 // Network related const
@@ -562,6 +562,8 @@ func (c *connection) doWriteIo() (bytesSent int64, err error) {
 	buffers := c.writeBuffers
 	if tlsConn, ok := c.rawConnection.(*mtls.TLSConn); ok {
 		bytesSent, err = tlsConn.WriteTo(&buffers)
+	} else if cc, ok := c.rawConnection.(*clientConn); ok {
+		bytesSent, err = cc.WriteTo(&buffers)
 	} else {
 		bytesSent, err = buffers.WriteTo(c.rawConnection)
 	}
@@ -843,8 +845,31 @@ func NewClientConnection(sourceAddr net.Addr, tlsMng types.TLSContextManager, re
 	return conn
 }
 
+var hosts = [...]string{"/tmp/netty12222.sock", "/tmp/netty12223.sock", "/tmp/netty12224.sock", "/tmp/netty12225.sock"}
+var index int
+
+type clientConn struct {
+	net.Conn
+}
+
+func (c *clientConn) Read(b []byte) (n int, err error) {
+	return c.Conn.Read(b)
+}
+
+func (c *clientConn) Write(b []byte) (n int, err error) {
+	return c.Conn.Write(b)
+}
+
+func (c *clientConn) WriteTo(buffers *net.Buffers) (int64, error) {
+	return (*buffers).WriteTo(c.Conn)
+}
+
 func (cc *clientConnection) Connect(ioEnabled bool) (err error) {
 	cc.connectOnce.Do(func() {
+
+		var c net.Conn
+
+
 		var localTCPAddr *net.TCPAddr
 
 		if cc.localAddr != nil {
@@ -853,8 +878,17 @@ func (cc *clientConnection) Connect(ioEnabled bool) (err error) {
 
 		var remoteTCPAddr *net.TCPAddr
 		remoteTCPAddr, err = net.ResolveTCPAddr("tcp", cc.remoteAddr.String())
+		c, err = net.DialTCP("tcp", localTCPAddr, remoteTCPAddr)
+		cc.rawConnection = &clientConn{c}
 
-		cc.rawConnection, err = net.DialTCP("tcp", localTCPAddr, remoteTCPAddr)
+
+        /*
+		index = (index + 1) % len(hosts)
+		c, err = net.Dial("unix", hosts[index])
+		cc.rawConnection = &clientConn{c}
+		//cc.rawConnection = c
+        */
+
 		var event types.ConnectionEvent
 
 		if err != nil {
