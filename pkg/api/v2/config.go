@@ -36,8 +36,15 @@ type HostConfig struct {
 	TLSDisable     bool           `json:"tls_disable,omitempty"`
 }
 
+// ListenerType: Ingress or Egress
+type ListenerType string
+
+const EGRESS ListenerType = "egress"
+const INGRESS ListenerType = "ingress"
+
 type ListenerConfig struct {
 	Name                                  string        `json:"name"`
+	Type                                  ListenerType  `json:"type"`
 	AddrConfig                            string        `json:"address"`
 	BindToPort                            bool          `json:"bind_port"`
 	HandOffRestoredDestinationConnections bool          `json:"handoff_restoreddestination"`
@@ -67,12 +74,19 @@ type FaultInjectConfig struct {
 	DelayDurationConfig DurationConfig `json:"delay_duration"`
 }
 
+type DelayInjectConfig struct {
+	Percent             uint32         `json:"percentage"`
+	DelayDurationConfig DurationConfig `json:"fixed_delay"`
+}
+
 type RouterConfig struct {
-	Match          RouterMatch    `json:"match"`
-	Route          RouteAction    `json:"route"`
-	Redirect       RedirectAction `json:"redirect"`
-	MetadataConfig MetadataConfig `json:"metadata"`
-	Decorator      Decorator      `json:"decorator"`
+	Match           RouterMatch            `json:"match"`
+	Route           RouteAction            `json:"route"`
+	Redirect        RedirectAction         `json:"redirect"`
+	DirectResponse  *DirectResponseAction  `json:"direct_response"`
+	MetadataConfig  MetadataConfig         `json:"metadata"`
+	Decorator       Decorator              `json:"decorator"`
+	PerFilterConfig map[string]interface{} `json:"per_filter_config"`
 }
 
 type RouterActionConfig struct {

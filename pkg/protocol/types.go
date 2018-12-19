@@ -23,19 +23,29 @@ import (
 
 // Protocol type definition
 const (
+	Auto      types.Protocol = "Auto"
 	SofaRPC   types.Protocol = "SofaRpc"
 	HTTP1     types.Protocol = "Http1"
 	HTTP2     types.Protocol = "Http2"
+	MHTTP2    types.Protocol = "Http2"
 	Xprotocol types.Protocol = "X"
+)
+
+// header direction definition
+const (
+	Request  = "Request"
+	Response = "Response"
 )
 
 // Host key for routing in MOSN Header
 const (
-	MosnHeaderHostKey         = "host"
-	MosnHeaderPathKey         = "path"
-	MosnHeaderQueryStringKey  = "querystring"
-	MosnHeaderMethod          = "method"
+	MosnHeaderDirection       = "x-mosn-direction" // for protocol convert
+	MosnHeaderHostKey         = "x-mosn-host"
+	MosnHeaderPathKey         = "x-mosn-path"
+	MosnHeaderQueryStringKey  = "x-mosn-querystring"
+	MosnHeaderMethod          = "x-mosn-method"
 	MosnOriginalHeaderPathKey = "x-mosn-original-path"
+	MosnResponseStatusCode    = "x-mosn-response-code"
 )
 
 // Hseader with special meaning in istio
@@ -72,4 +82,24 @@ func (h CommonHeader) Range(f func(key, value string) bool) {
 			break
 		}
 	}
+}
+
+// Clone used to deep copy header's map
+func (h CommonHeader) Clone() types.HeaderMap {
+	copy := make(map[string]string)
+
+	for k, v := range h {
+		copy[k] = v
+	}
+
+	return CommonHeader(copy)
+}
+
+func (h CommonHeader) ByteSize() uint64 {
+	var size uint64
+
+	for k, v := range h {
+		size += uint64(len(k) + len(v))
+	}
+	return size
 }

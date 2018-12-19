@@ -19,14 +19,16 @@ package commonrule
 
 import (
 	"context"
-	"encoding/json"
 	"strconv"
 
 	"github.com/alipay/sofa-mosn/pkg/filter"
 	"github.com/alipay/sofa-mosn/pkg/filter/stream/commonrule/model"
 	"github.com/alipay/sofa-mosn/pkg/log"
 	"github.com/alipay/sofa-mosn/pkg/types"
+	jsoniter "github.com/json-iterator/go"
 )
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 func init() {
 	filter.RegisterStream("commonrule", CreateCommonRuleFilterFactory)
@@ -45,7 +47,7 @@ func parseCommonRuleConfig(config map[string]interface{}) *model.CommonRuleConfi
 
 type commmonRuleFilter struct {
 	context           context.Context
-	cb                types.StreamReceiverFilterCallbacks
+	handler           types.StreamReceiverFilterHandler
 	commonRuleConfig  *model.CommonRuleConfig
 	RuleEngineFactory *RuleEngineFactory
 }
@@ -69,28 +71,28 @@ func NewCommonRuleFilter(context context.Context, config *model.CommonRuleConfig
 }
 
 //implement StreamReceiverFilter
-func (f *commmonRuleFilter) OnDecodeHeaders(headers types.HeaderMap, endStream bool) types.StreamHeadersFilterStatus {
+func (f *commmonRuleFilter) OnReceiveHeaders(headers types.HeaderMap, endStream bool) types.StreamHeadersFilterStatus {
 	// do filter
 	if f.RuleEngineFactory.invoke(headers) {
 		return types.StreamHeadersFilterContinue
 	}
 	headers.Set(types.HeaderStatus, strconv.Itoa(types.LimitExceededCode))
-	f.cb.AppendHeaders(headers, true)
+	f.handler.AppendHeaders(headers, true)
 	return types.StreamHeadersFilterStop
 }
 
-func (f *commmonRuleFilter) OnDecodeData(buf types.IoBuffer, endStream bool) types.StreamDataFilterStatus {
+func (f *commmonRuleFilter) OnReceiveData(buf types.IoBuffer, endStream bool) types.StreamDataFilterStatus {
 	//do filter
 	return types.StreamDataFilterContinue
 }
 
-func (f *commmonRuleFilter) OnDecodeTrailers(trailers types.HeaderMap) types.StreamTrailersFilterStatus {
+func (f *commmonRuleFilter) OnReceiveTrailers(trailers types.HeaderMap) types.StreamTrailersFilterStatus {
 	//do filter
 	return types.StreamTrailersFilterContinue
 }
 
-func (f *commmonRuleFilter) SetDecoderFilterCallbacks(cb types.StreamReceiverFilterCallbacks) {
-	f.cb = cb
+func (f *commmonRuleFilter) SetReceiveFilterHandler(handler types.StreamReceiverFilterHandler) {
+	f.handler = handler
 }
 
 func (f *commmonRuleFilter) OnDestroy() {}

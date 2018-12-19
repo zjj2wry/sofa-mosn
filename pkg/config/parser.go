@@ -20,6 +20,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/alipay/sofa-mosn/pkg/api/v2"
 	"github.com/alipay/sofa-mosn/pkg/filter"
@@ -27,17 +28,26 @@ import (
 	"github.com/alipay/sofa-mosn/pkg/protocol"
 	"github.com/alipay/sofa-mosn/pkg/server"
 	"github.com/alipay/sofa-mosn/pkg/types"
-	jsoniter "github.com/json-iterator/go"
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/json-iterator/go"
 )
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 var protocolsSupported = map[string]bool{
+	string(protocol.Auto):      true,
 	string(protocol.SofaRPC):   true,
-	string(protocol.HTTP2):     true,
 	string(protocol.HTTP1):     true,
+	string(protocol.HTTP2):     true,
 	string(protocol.Xprotocol): true,
 }
+
+const (
+	MinHostWeight               = uint32(1)
+	MaxHostWeight               = uint32(128)
+	DefaultMaxRequestPerConn    = uint32(1024)
+	DefaultConnBufferLimitBytes = uint32(16 * 1024)
+)
 
 // RegisterProtocolParser
 // used to register parser
@@ -87,12 +97,14 @@ func ParseClusterConfig(clusters []v2.Cluster) ([]v2.Cluster, map[string][]v2.Ho
 			log.StartLogger.Fatalln("[name] is required in cluster config")
 		}
 		if c.MaxRequestPerConn == 0 {
-			c.MaxRequestPerConn = 1024
-			log.StartLogger.Infof("[max_request_per_conn] is not specified, use default value %d", 1024)
+			c.MaxRequestPerConn = DefaultMaxRequestPerConn
+			log.StartLogger.Infof("[max_request_per_conn] is not specified, use default value %d",
+				DefaultMaxRequestPerConn)
 		}
 		if c.ConnBufferLimitBytes == 0 {
-			c.ConnBufferLimitBytes = 16 * 1026
-			log.StartLogger.Infof("[conn_buffer_limit_bytes] is not specified, use default value %d", 1024*16)
+			c.ConnBufferLimitBytes = DefaultConnBufferLimitBytes
+			log.StartLogger.Infof("[conn_buffer_limit_bytes] is not specified, use default value %d",
+				DefaultConnBufferLimitBytes)
 		}
 		if c.LBSubSetConfig.FallBackPolicy > 2 {
 			log.StartLogger.Fatalln("lb subset config 's fall back policy set error. ",
@@ -123,11 +135,6 @@ func parseHostConfig(hosts []v2.Host) (hs []v2.Host) {
 	}
 	return
 }
-
-const (
-	MinHostWeight = uint32(1)
-	MaxHostWeight = uint32(128)
-)
 
 func transHostWeight(weight uint32) uint32 {
 	if weight > MaxHostWeight {
@@ -215,15 +222,6 @@ func ParseRouterConfiguration(c *v2.FilterChain) *v2.RouterConfiguration {
 
 // GetListenerDisableIO used to check downstream protocol and return ListenerDisableIO
 func GetListenerDisableIO(c *v2.FilterChain) bool {
-	for _, f := range c.Filters {
-		if f.Type == v2.DEFAULT_NETWORK_FILTER {
-			if downstream, ok := f.Config["downstream_protocol"]; ok {
-				if downstream == string(protocol.HTTP2) || downstream == string(protocol.HTTP1) {
-					return true
-				}
-			}
-		}
-	}
 	return false
 }
 
@@ -256,6 +254,40 @@ func ParseFaultInjectFilter(cfg map[string]interface{}) *v2.FaultInject {
 		log.StartLogger.Fatal("parsing fault inject filter error")
 	}
 	return filterConfig
+}
+
+// ParseStreamFaultInjectFilter
+func ParseStreamFaultInjectFilter(cfg map[string]interface{}) (*v2.StreamFaultInject, error) {
+	filterConfig := &v2.StreamFaultInject{}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(data, filterConfig); err != nil {
+		return nil, err
+	}
+	return filterConfig, nil
+}
+
+// ParseMixerFilter
+func ParseMixerFilter(cfg map[string]interface{}) *v2.Mixer {
+	mixerFilter := &v2.Mixer{}
+
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		log.StartLogger.Errorf("parsing mixer filter error, err: %v, cfg: %v", err, cfg)
+		return nil
+	}
+
+	var un jsonpb.Unmarshaler
+	err = un.Unmarshal(strings.NewReader(string(data)), &mixerFilter.HttpClientConfig)
+	if err != nil {
+		log.StartLogger.Errorf("parsing mixer filter error, err: %v, cfg: %v", err, cfg)
+		return nil
+	}
+
+	//log.DefaultLogger.Infof("mixconfig: %v", mixerFilter)
+	return mixerFilter
 }
 
 // ParseHealthCheckFilter

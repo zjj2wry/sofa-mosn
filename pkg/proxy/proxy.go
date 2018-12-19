@@ -24,14 +24,15 @@ import (
 	"sync"
 
 	"github.com/alipay/sofa-mosn/pkg/api/v2"
-	"github.com/alipay/sofa-mosn/pkg/buffer"
 	"github.com/alipay/sofa-mosn/pkg/log"
 	"github.com/alipay/sofa-mosn/pkg/router"
 	"github.com/alipay/sofa-mosn/pkg/stream"
 	mosnsync "github.com/alipay/sofa-mosn/pkg/sync"
 	"github.com/alipay/sofa-mosn/pkg/types"
 	"github.com/json-iterator/go"
-	metrics "github.com/rcrowley/go-metrics"
+	"github.com/rcrowley/go-metrics"
+	"github.com/alipay/sofa-mosn/pkg/protocol"
+	"github.com/alipay/sofa-mosn/pkg/mtls"
 )
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
@@ -39,7 +40,8 @@ var json = jsoniter.ConfigCompatibleWithStandardLibrary
 var (
 	globalStats *Stats
 
-	workerPool mosnsync.ShardWorkerPool
+	currProxyID uint32
+	workerPool  mosnsync.ShardWorkerPool
 )
 
 func init() {
@@ -57,20 +59,20 @@ func init() {
 // types.ReadFilter
 // types.ServerStreamConnectionEventListener
 type proxy struct {
-	config              *v2.Proxy
-	clusterManager      types.ClusterManager
-	readCallbacks       types.ReadFilterCallbacks
-	upstreamConnection  types.ClientConnection
-	downstreamCallbacks DownstreamCallbacks
-	clusterName         string
-	routersWrapper      types.RouterWrapper // wrapper used to point to the routers instance
-	serverCodec         types.ServerStreamConnection
-	context             context.Context
-	activeSteams        *list.List // downstream requests
-	asMux               sync.RWMutex
-	stats               *Stats
-	listenerStats       *Stats
-	accessLogs          []types.AccessLog
+	config             *v2.Proxy
+	clusterManager     types.ClusterManager
+	readCallbacks      types.ReadFilterCallbacks
+	upstreamConnection types.ClientConnection
+	downstreamListener types.ConnectionEventListener
+	clusterName        string
+	routersWrapper     types.RouterWrapper // wrapper used to point to the routers instance
+	serverStreamConn   types.ServerStreamConnection
+	context            context.Context
+	activeSteams       *list.List // downstream requests
+	asMux              sync.RWMutex
+	stats              *Stats
+	listenerStats      *Stats
+	accessLogs         []types.AccessLog
 }
 
 // NewProxy create proxy instance for given v2.Proxy config
@@ -83,8 +85,6 @@ func NewProxy(ctx context.Context, config *v2.Proxy, clusterManager types.Cluste
 		context:        ctx,
 		accessLogs:     ctx.Value(types.ContextKeyAccessLogs).([]types.AccessLog),
 	}
-
-	proxy.context = buffer.NewBufferPoolContext(ctx, false)
 
 	extJSON, err := json.Marshal(proxy.config.ExtendConfig)
 	if err == nil {
@@ -100,13 +100,13 @@ func NewProxy(ctx context.Context, config *v2.Proxy, clusterManager types.Cluste
 	listenerName := ctx.Value(types.ContextKeyListenerName).(string)
 	proxy.listenerStats = newListenerStats(listenerName)
 
-	if routersWrapper := router.GetRoutersMangerInstance().GetRouterWrapperByListenerName(proxy.config.RouterConfigName); routersWrapper != nil {
+	if routersWrapper := router.GetRoutersMangerInstance().GetRouterWrapperByName(proxy.config.RouterConfigName); routersWrapper != nil {
 		proxy.routersWrapper = routersWrapper
 	} else {
 		log.DefaultLogger.Errorf("RouterConfigName:%s doesn't exit", proxy.config.RouterConfigName)
 	}
 
-	proxy.downstreamCallbacks = &downstreamCallbacks{
+	proxy.downstreamListener = &downstreamCallbacks{
 		proxy: proxy,
 	}
 
@@ -114,7 +114,29 @@ func NewProxy(ctx context.Context, config *v2.Proxy, clusterManager types.Cluste
 }
 
 func (p *proxy) OnData(buf types.IoBuffer) types.FilterStatus {
-	p.serverCodec.Dispatch(buf)
+	if p.serverStreamConn == nil {
+		var prot string
+		if conn, ok := p.readCallbacks.Connection().RawConn().(*mtls.TLSConn); ok {
+			prot = conn.ConnectionState().NegotiatedProtocol
+		}
+		protocol, err := stream.SelectStreamFactoryProtocol(prot, buf.Bytes())
+		if err == stream.EAGAIN {
+			return types.Stop
+		} else if err == stream.FAILED {
+			var size int
+			if buf.Len() > 10 {
+				size = 10
+			} else {
+				size = buf.Len()
+			}
+			log.DefaultLogger.Errorf("Protocol Auto error magic :%v", buf.Bytes()[:size])
+			p.readCallbacks.Connection().Close(types.NoFlush, types.OnReadErrClose)
+			return types.Stop
+		}
+		log.DefaultLogger.Debugf("Protoctol Auto: %v", protocol)
+		p.serverStreamConn = stream.CreateServerStreamConnection(p.context, protocol, p.readCallbacks.Connection(), p)
+	}
+	p.serverStreamConn.Dispatch(buf)
 
 	return types.Stop
 }
@@ -168,17 +190,20 @@ func (p *proxy) InitializeReadFilterCallbacks(cb types.ReadFilterCallbacks) {
 	p.listenerStats.DownstreamConnectionTotal.Inc(1)
 	p.listenerStats.DownstreamConnectionActive.Inc(1)
 
-	p.readCallbacks.Connection().AddConnectionEventListener(p.downstreamCallbacks)
-	p.serverCodec = stream.CreateServerStreamConnection(p.context, types.Protocol(p.config.DownstreamProtocol), p.readCallbacks.Connection(), p)
+	p.readCallbacks.Connection().AddConnectionEventListener(p.downstreamListener)
+	if p.config.DownstreamProtocol != string(protocol.Auto) {
+		p.serverStreamConn = stream.CreateServerStreamConnection(p.context, types.Protocol(p.config.DownstreamProtocol), p.readCallbacks.Connection(), p)
+	}
 }
 
 func (p *proxy) OnGoAway() {}
 
-func (p *proxy) NewStream(context context.Context, streamID string, responseSender types.StreamSender) types.StreamReceiver {
-	stream := newActiveStream(context, streamID, p, responseSender)
+func (p *proxy) NewStreamDetect(ctx context.Context, responseSender types.StreamSender, spanBuilder types.SpanBuilder) types.StreamReceiveListener {
+	stream := newActiveStream(ctx, p, responseSender, spanBuilder)
 
 	if ff := p.context.Value(types.ContextKeyStreamFilterChainFactories); ff != nil {
 		ffs := ff.([]types.StreamFilterChainFactory)
+		log.DefaultLogger.Debugf("there is %d stream filters in config", len(ffs))
 
 		for _, f := range ffs {
 			f.CreateFilterChain(p.context, stream)
@@ -228,4 +253,17 @@ type downstreamCallbacks struct {
 
 func (dc *downstreamCallbacks) OnEvent(event types.ConnectionEvent) {
 	dc.proxy.onDownstreamEvent(event)
+}
+
+func (p *proxy) convertProtocol() (dp, up types.Protocol) {
+	if p.serverStreamConn == nil {
+		dp = types.Protocol(p.config.DownstreamProtocol)
+	} else {
+		dp = p.serverStreamConn.Protocol()
+	}
+	up = types.Protocol(p.config.UpstreamProtocol)
+	if up == protocol.Auto {
+		up = dp
+	}
+	return
 }

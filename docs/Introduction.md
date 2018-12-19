@@ -18,8 +18,6 @@ Envoy 使用 C++ 语言开发，不符合蚂蚁技术栈的发展方向，无法
   
 当前， SOFAMosn 已支持 Istio 的 API，通过 XDS API 与 Pilot 对接，SOFAMosn 可获取控制面推送的配置信息，来完成代理的功能。在实践中，你可以使用 SOFAMosn 与 Istio 集成来实现 Service Mesh 组件(比如，我们的整体落地实践 [SOFAMesh](https://github.com/alipay/sofa-mesh) 项目)，也可以单独使用 SOFAMosn 作为业务网关，通过使用 SOFAMosn 你将在如下几个方面获得收益：
 
-
-
 1. SOFAMosn 使用 GoLang 作为开发语言，开发效率高，在云原生时代可与 k8s 等技术无缝对接，有利于加速微服务的落地
 2. SOFAMosn 可代理 Java，C++，GoLang，PHP，Python 等异构语言之间组件的互相调用，避免多语言版本组件的重复开发，可提高业务开发效率，目前 SOFAMosn 已经在蚂蚁金服中作为跨语言 RPC 调用的桥梁被使用
 3. SOFAMosn 可提供灵活的流量调度能力，有助于运维体系的支撑，包括：蓝绿升级、容灾切换等
@@ -140,13 +138,13 @@ GoLang 的转发性能比起 C++ 肯定是稍有逊色的，为了尽可能的�
 
 ### 模型二
 
-如下图所示，基于 [Netoll](https://godoc.org/github.com/mailru/easygo/netpoll) 重写 epoll 机制，将 IO 和 PROXY 均进行池化，downstream connection 将自身的读写事件注册到 netpoll 的 epoll/kqueue wait 协程，poll/kqueue wait 协程接受到可读事件，触发回调，从协程池中挑选一个执行读操作。
+如下图所示，基于 [Netpoll](https://godoc.org/github.com/mailru/easygo/netpoll) 重写 epoll 机制，将 IO 和 PROXY 均进行池化，downstream connection 将自身的读写事件注册到 netpoll 的 epoll/kqueue wait 协程，epoll/kqueue wait 协程接受到可读事件，触发回调，从协程池中挑选一个执行读操作。
 
 ![NetPoll 协程池](design/resource/MOSNThreadModelStage2.png)
 
 + 使用自定义 Netpoll IO 池化操作带来的好处是：
     + 当可读事件触发时，从协程池中获取一个 goroutine 来执行读处理，而不是新分配一个 goroutine，以此来控制高并发下的协程数量
-    + 当收到链接可读事件时，才真正为其分配 read buffer 以及相应的执行协程。这样 GetBytes（）可以降低因为大量空闲链接场景导致的额外协程和 read buffer 开销
+    + 当收到链接可读事件时，才真正为其分配 read buffer 以及相应的执行协程。这样 GetBytes() 可以降低因为大量空闲链接场景导致的额外协程和 read buffer 开销
 + 此模型适用于连接数较多、可读连接数量受限的情况，例如：mosn 作为 api gateway 的场景
 
 ## SOFAMosn 做了哪些内存优化

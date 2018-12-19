@@ -23,6 +23,8 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/alipay/sofa-mosn/pkg/trace"
+
 	"github.com/alipay/sofa-mosn/pkg/api/v2"
 	"github.com/alipay/sofa-mosn/pkg/config"
 	_ "github.com/alipay/sofa-mosn/pkg/filter/network/connectionmanager"
@@ -46,6 +48,7 @@ type Mosn struct {
 // NewMosn
 // Create server from mosn config
 func NewMosn(c *config.MOSNConfig) *Mosn {
+	initializeTracing(c.Tracing)
 	m := &Mosn{}
 	mode := c.Mode()
 
@@ -101,7 +104,6 @@ func NewMosn(c *config.MOSNConfig) *Mosn {
 		var srv server.Server
 		if mode == config.Xds {
 			srv = server.NewServer(sc, cmf, m.clustermanager)
-
 		} else {
 			//initialize server instance
 			srv = server.NewServer(sc, cmf, m.clustermanager)
@@ -196,6 +198,22 @@ func Start(c *config.MOSNConfig, serviceCluster string, serviceNode string) {
 	xdsClient.Stop()
 }
 
+func initializeTracing(config config.TracingConfig) {
+	if config.Enable && config.Tracer != "" {
+		if config.Tracer == "SOFATracer" {
+			trace.CreateInstance()
+			trace.SetTracer(trace.SofaTracerInstance)
+		} else {
+			log.DefaultLogger.Errorf("Unable to recognise tracing implementation %s, tracing functionality is turned off.", config.Tracer)
+			trace.DisableTracing()
+			return
+		}
+		trace.EnableTracing()
+	} else {
+		trace.DisableTracing()
+	}
+}
+
 type clusterManagerFilter struct {
 	cccb types.ClusterConfigFactoryCb
 	chcb types.ClusterHostFactoryCb
@@ -207,32 +225,34 @@ func (cmf *clusterManagerFilter) OnCreated(cccb types.ClusterConfigFactoryCb, ch
 }
 
 func getInheritListeners() []*v2.Listener {
-	if os.Getenv("_MOSN_GRACEFUL_RESTART") == "true" {
-		count, _ := strconv.Atoi(os.Getenv("_MOSN_INHERIT_FD"))
+	if os.Getenv(types.GracefulRestart) == "true" {
+		count, _ := strconv.Atoi(os.Getenv(types.InheritFd))
 		listeners := make([]*v2.Listener, count)
 
 		log.StartLogger.Infof("received %d inherit fds", count)
 
 		for idx := 0; idx < count; idx++ {
-			//because passed listeners fd's index starts from 3
-			fd := uintptr(3 + idx)
-			file := os.NewFile(fd, "")
-			if file == nil {
-				log.StartLogger.Errorf("create new file from fd %d failed", fd)
-				continue
-			}
-			defer file.Close()
+			func() {
+				//because passed listeners fd's index starts from 3
+				fd := uintptr(3 + idx)
+				file := os.NewFile(fd, "")
+				if file == nil {
+					log.StartLogger.Errorf("create new file from fd %d failed", fd)
+					return
+				}
+				defer file.Close()
 
-			fileListener, err := net.FileListener(file)
-			if err != nil {
-				log.StartLogger.Errorf("recover listener from fd %d failed: %s", fd, err)
-				continue
-			}
-			if listener, ok := fileListener.(*net.TCPListener); ok {
-				listeners[idx] = &v2.Listener{Addr: listener.Addr(), InheritListener: listener}
-			} else {
-				log.StartLogger.Errorf("listener recovered from fd %d is not a tcp listener", fd)
-			}
+				fileListener, err := net.FileListener(file)
+				if err != nil {
+					log.StartLogger.Errorf("recover listener from fd %d failed: %s", fd, err)
+					return
+				}
+				if listener, ok := fileListener.(*net.TCPListener); ok {
+					listeners[idx] = &v2.Listener{Addr: listener.Addr(), InheritListener: listener}
+				} else {
+					log.StartLogger.Errorf("listener recovered from fd %d is not a tcp listener", fd)
+				}
+			}()
 		}
 		return listeners
 	}

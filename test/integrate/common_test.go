@@ -5,9 +5,12 @@ import (
 	"time"
 
 	"github.com/alipay/sofa-mosn/pkg/protocol"
-	_ "github.com/alipay/sofa-mosn/pkg/protocol/sofarpc/codec"
+	_ "github.com/alipay/sofa-mosn/pkg/protocol/http/conv"
+	_ "github.com/alipay/sofa-mosn/pkg/protocol/http2/conv"
+	_ "github.com/alipay/sofa-mosn/pkg/protocol/rpc/sofarpc/codec"
+	_ "github.com/alipay/sofa-mosn/pkg/protocol/rpc/sofarpc/conv"
 	_ "github.com/alipay/sofa-mosn/pkg/stream/http"
-	_ "github.com/alipay/sofa-mosn/pkg/stream/http2"
+	_ "github.com/alipay/sofa-mosn/pkg/stream/mhttp2"
 	_ "github.com/alipay/sofa-mosn/pkg/stream/sofarpc"
 	_ "github.com/alipay/sofa-mosn/pkg/stream/xprotocol"
 	"github.com/alipay/sofa-mosn/test/util"
@@ -22,9 +25,15 @@ func TestCommon(t *testing.T) {
 		NewTestCase(t, protocol.HTTP1, protocol.HTTP2, util.NewHTTPServer(t, nil)),
 		NewTestCase(t, protocol.HTTP2, protocol.HTTP1, util.NewUpstreamHTTP2(t, appaddr, nil)),
 		NewTestCase(t, protocol.HTTP2, protocol.HTTP2, util.NewUpstreamHTTP2(t, appaddr, nil)),
+		NewTestCase(t, protocol.MHTTP2, protocol.MHTTP2, util.NewUpstreamHTTP2(t, appaddr, nil)),
 		NewTestCase(t, protocol.SofaRPC, protocol.HTTP1, util.NewRPCServer(t, appaddr, util.Bolt1)),
 		NewTestCase(t, protocol.SofaRPC, protocol.HTTP2, util.NewRPCServer(t, appaddr, util.Bolt1)),
+		NewTestCase(t, protocol.SofaRPC, protocol.MHTTP2, util.NewRPCServer(t, appaddr, util.Bolt1)),
 		NewTestCase(t, protocol.SofaRPC, protocol.SofaRPC, util.NewRPCServer(t, appaddr, util.Bolt1)),
+
+		//Protocol-auto
+		NewTestCase(t, protocol.MHTTP2, protocol.Auto, util.NewUpstreamHTTP2(t, appaddr, nil)),
+		NewTestCase(t, protocol.HTTP1, protocol.Auto, util.NewHTTPServer(t, nil)),
 
 		//TODO:
 		//NewTestCase(T, protocol.SofaRPC, protocol.HTTP1, util.NewRPCServer(T, appaddr, util.Bolt2)),
@@ -55,15 +64,21 @@ func TestTLS(t *testing.T) {
 		NewTestCase(t, protocol.HTTP1, protocol.HTTP2, util.NewHTTPServer(t, nil)),
 		NewTestCase(t, protocol.HTTP2, protocol.HTTP1, util.NewUpstreamHTTP2(t, appaddr, nil)),
 		NewTestCase(t, protocol.HTTP2, protocol.HTTP2, util.NewUpstreamHTTP2(t, appaddr, nil)),
+		NewTestCase(t, protocol.MHTTP2, protocol.MHTTP2, util.NewUpstreamHTTP2(t, appaddr, nil)),
 		NewTestCase(t, protocol.SofaRPC, protocol.HTTP1, util.NewRPCServer(t, appaddr, util.Bolt1)),
 		NewTestCase(t, protocol.SofaRPC, protocol.HTTP2, util.NewRPCServer(t, appaddr, util.Bolt1)),
+		NewTestCase(t, protocol.SofaRPC, protocol.MHTTP2, util.NewRPCServer(t, appaddr, util.Bolt1)),
 		NewTestCase(t, protocol.SofaRPC, protocol.SofaRPC, util.NewRPCServer(t, appaddr, util.Bolt1)),
+
+		//Protocol-auto
+		NewTestCase(t, protocol.MHTTP2, protocol.Auto, util.NewUpstreamHTTP2(t, appaddr, nil)),
+		NewTestCase(t, protocol.HTTP1, protocol.Auto, util.NewHTTPServer(t, nil)),
+
 		//TODO:
 		//NewTestCase(T, protocol.SofaRPC, protocol.HTTP1, util.NewRPCServer(T, appaddr, util.Bolt2)),
 		//NewTestCase(T, protocol.SofaRPC, protocol.HTTP2, util.NewRPCServer(T, appaddr, util.Bolt2)),
 		//NewTestCase(T, protocol.SofaRPC, protocol.SofaRPC, util.NewRPCServer(T, appaddr, util.Bolt2)),
 		//NewTestCase(T, protocol.Xprotocol, protocol.Xprotocol, util.NewRPCServer(T, appaddr, util.Xprotocol)),
-
 	}
 	for i, tc := range testCases {
 		t.Logf("start case #%d\n", i)

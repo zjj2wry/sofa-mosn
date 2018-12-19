@@ -24,12 +24,11 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"sync"
 	"syscall"
 	"time"
-
-	"runtime/debug"
 
 	"github.com/alipay/sofa-mosn/pkg/buffer"
 	"github.com/alipay/sofa-mosn/pkg/log"
@@ -55,7 +54,7 @@ func TransferServer(handler types.ConnectionHandler) {
 		}
 	}()
 
-	if os.Getenv("_MOSN_GRACEFUL_RESTART") != "true" {
+	if os.Getenv(types.GracefulRestart) != "true" {
 		return
 	}
 	if _, err := os.Stat(TransferDomainSocket); err == nil {
@@ -538,7 +537,7 @@ func transferNewConn(conn net.Conn, dataBuf, tlsBuf []byte, handler types.Connec
 		}
 	}
 
-	ch := make(chan types.Connection)
+	ch := make(chan types.Connection, 1)
 	// new connection
 	go listener.GetListenerCallbacks().OnAccept(conn, listener.HandOffRestoredDestinationConnections(), nil, ch, dataBuf)
 	select {

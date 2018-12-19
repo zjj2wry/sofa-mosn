@@ -20,15 +20,15 @@ package proxy
 import (
 	"container/list"
 	"context"
+	"strconv"
 
-	"github.com/alipay/sofa-mosn/pkg/buffer"
 	"github.com/alipay/sofa-mosn/pkg/log"
 	"github.com/alipay/sofa-mosn/pkg/protocol"
 	"github.com/alipay/sofa-mosn/pkg/types"
 )
 
 // types.StreamEventListener
-// types.StreamReceiver
+// types.StreamReceiveListener
 // types.PoolEventListener
 type upstreamRequest struct {
 	proxy         *proxy
@@ -68,29 +68,39 @@ func (r *upstreamRequest) OnResetStream(reason types.StreamResetReason) {
 	workerPool.Offer(&resetEvent{
 		streamEvent: streamEvent{
 			direction: Upstream,
-			streamID:  r.downStream.streamID,
+			streamID:  r.downStream.ID,
 			stream:    r.downStream,
 		},
 		reason: reason,
 	})
 }
 
+func (r *upstreamRequest) OnDestroyStream() {}
+
 func (r *upstreamRequest) ResetStream(reason types.StreamResetReason) {
 	r.requestSender = nil
 
-	// todo: check if we get a reset on encode request headers. e.g. send failed
-	r.downStream.onUpstreamReset(UpstreamReset, reason)
+	if !r.setupRetry {
+		// todo: check if we get a reset on encode request headers. e.g. send failed
+		r.downStream.onUpstreamReset(UpstreamReset, reason)
+	}
 }
 
-// types.StreamReceiver
+// types.StreamReceiveListener
 // Method to decode upstream's response message
 func (r *upstreamRequest) OnReceiveHeaders(context context.Context, headers types.HeaderMap, endStream bool) {
-	buffer.TransmitBufferPoolContext(r.downStream.context, context)
+	// save response code
+	if status, ok := headers.Get(protocol.MosnResponseStatusCode); ok {
+		if code, err := strconv.Atoi(status); err == nil {
+			r.downStream.requestInfo.SetResponseCode(uint32(code))
+		}
+		headers.Del(protocol.MosnResponseStatusCode)
+	}
 
 	workerPool.Offer(&receiveHeadersEvent{
 		streamEvent: streamEvent{
 			direction: Upstream,
-			streamID:  r.downStream.streamID,
+			streamID:  r.downStream.ID,
 			stream:    r.downStream,
 		},
 		headers:   headers,
@@ -110,7 +120,7 @@ func (r *upstreamRequest) OnReceiveData(context context.Context, data types.IoBu
 	workerPool.Offer(&receiveDataEvent{
 		streamEvent: streamEvent{
 			direction: Upstream,
-			streamID:  r.downStream.streamID,
+			streamID:  r.downStream.ID,
 			stream:    r.downStream,
 		},
 		data:      r.downStream.downstreamRespDataBuf,
@@ -128,7 +138,7 @@ func (r *upstreamRequest) OnReceiveTrailers(context context.Context, trailers ty
 	workerPool.Offer(&receiveTrailerEvent{
 		streamEvent: streamEvent{
 			direction: Upstream,
-			streamID:  r.downStream.streamID,
+			streamID:  r.downStream.ID,
 			stream:    r.downStream,
 		},
 		trailers: trailers,
@@ -151,12 +161,11 @@ func (r *upstreamRequest) appendHeaders(headers types.HeaderMap, endStream bool)
 	r.sendComplete = endStream
 
 	log.StartLogger.Tracef("upstream request before conn pool new stream")
-	r.connPool.NewStream(r.downStream.context, r.downStream.streamID, r, r)
+	r.connPool.NewStream(r.downStream.context, r, r)
 }
 
 func (r *upstreamRequest) convertHeader(headers types.HeaderMap) types.HeaderMap {
-	dp := types.Protocol(r.proxy.config.DownstreamProtocol)
-	up := types.Protocol(r.proxy.config.UpstreamProtocol)
+	dp, up := r.proxy.convertProtocol()
 
 	// need protocol convert
 	if dp != up {
@@ -177,8 +186,7 @@ func (r *upstreamRequest) appendData(data types.IoBuffer, endStream bool) {
 }
 
 func (r *upstreamRequest) convertData(data types.IoBuffer) types.IoBuffer {
-	dp := types.Protocol(r.proxy.config.DownstreamProtocol)
-	up := types.Protocol(r.proxy.config.UpstreamProtocol)
+	dp, up := r.proxy.convertProtocol()
 
 	// need protocol convert
 	if dp != up {
@@ -199,8 +207,7 @@ func (r *upstreamRequest) appendTrailers(trailers types.HeaderMap) {
 }
 
 func (r *upstreamRequest) convertTrailer(trailers types.HeaderMap) types.HeaderMap {
-	dp := types.Protocol(r.proxy.config.DownstreamProtocol)
-	up := types.Protocol(r.proxy.config.UpstreamProtocol)
+	dp, up := r.proxy.convertProtocol()
 
 	// need protocol convert
 	if dp != up {
@@ -214,7 +221,7 @@ func (r *upstreamRequest) convertTrailer(trailers types.HeaderMap) types.HeaderM
 }
 
 // types.PoolEventListener
-func (r *upstreamRequest) OnFailure(streamID string, reason types.PoolFailureReason, host types.Host) {
+func (r *upstreamRequest) OnFailure(reason types.PoolFailureReason, host types.Host) {
 	var resetReason types.StreamResetReason
 
 	switch reason {
@@ -227,7 +234,7 @@ func (r *upstreamRequest) OnFailure(streamID string, reason types.PoolFailureRea
 	r.ResetStream(resetReason)
 }
 
-func (r *upstreamRequest) OnReady(streamID string, sender types.StreamSender, host types.Host) {
+func (r *upstreamRequest) OnReady(sender types.StreamSender, host types.Host) {
 	r.requestSender = sender
 	r.requestSender.GetStream().AddEventListener(r)
 
@@ -236,6 +243,9 @@ func (r *upstreamRequest) OnReady(streamID string, sender types.StreamSender, ho
 
 	r.downStream.requestInfo.OnUpstreamHostSelected(host)
 	r.downStream.requestInfo.SetUpstreamLocalAddress(host.Address())
+
+	// debug message for upstream
+	r.downStream.logger.Debugf("client conn id %d, proxy id %d, upstream id %d", r.proxy.readCallbacks.Connection().ID(), r.downStream.ID, sender.GetStream().ID())
 
 	// todo: check if we get a reset on send headers
 }

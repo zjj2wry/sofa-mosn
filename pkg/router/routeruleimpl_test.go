@@ -63,9 +63,14 @@ func TestPrefixRouteRuleImpl(t *testing.T) {
 			route.Match.Prefix,
 		}
 		headers := protocol.CommonHeader(map[string]string{protocol.MosnHeaderPathKey: tc.headerpath})
-		result := (rr.Match(headers, 1) != nil)
-		if result != tc.expected {
+		result := rr.Match(headers, 1)
+		if (result != nil) != tc.expected {
 			t.Errorf("#%d want matched %v, but get matched %v\n", i, tc.expected, result)
+		}
+		if result != nil {
+			if result.RouteRule().PathMatchCriterion().MatchType() != types.Prefix {
+				t.Errorf("#%d match type is not expected", i)
+			}
 		}
 	}
 }
@@ -98,9 +103,14 @@ func TestPathRouteRuleImpl(t *testing.T) {
 		base.caseSensitive = tc.caseSensitive //hack case sensitive
 		rr := &PathRouteRuleImpl{base, route.Match.Path}
 		headers := protocol.CommonHeader(map[string]string{protocol.MosnHeaderPathKey: tc.headerpath})
-		result := (rr.Match(headers, 1) != nil)
-		if result != tc.expected {
+		result := rr.Match(headers, 1)
+		if (result != nil) != tc.expected {
 			t.Errorf("#%d want matched %v, but get matched %v\n", i, tc.expected, result)
+		}
+		if result != nil {
+			if result.RouteRule().PathMatchCriterion().MatchType() != types.Exact {
+				t.Errorf("#%d match type is not expected", i)
+			}
 		}
 
 	}
@@ -138,9 +148,14 @@ func TestRegexRouteRuleImpl(t *testing.T) {
 			re,
 		}
 		headers := protocol.CommonHeader(map[string]string{protocol.MosnHeaderPathKey: tc.headerpath})
-		result := (rr.Match(headers, 1) != nil)
-		if result != tc.expected {
+		result := rr.Match(headers, 1)
+		if (result != nil) != tc.expected {
 			t.Errorf("#%d want matched %v, but get matched %v\n", i, tc.expected, result)
+		}
+		if result != nil {
+			if result.RouteRule().PathMatchCriterion().MatchType() != types.Regex {
+				t.Errorf("#%d match type is not expected", i)
+			}
 		}
 	}
 }
@@ -262,18 +277,18 @@ func Test_RouteRuleImplBase_finalizePathHeader(t *testing.T) {
 		{
 			name: "case1",
 			args: args{
-				headers:     protocol.CommonHeader{"path": "/"},
+				headers:     protocol.CommonHeader{protocol.MosnHeaderPathKey: "/"},
 				matchedPath: "/",
 			},
-			want: protocol.CommonHeader{"path": "/abc/", "x-mosn-original-path": "/"},
+			want: protocol.CommonHeader{protocol.MosnHeaderPathKey: "/abc/", protocol.MosnOriginalHeaderPathKey: "/"},
 		},
 		{
 			name: "case2",
 			args: args{
-				headers:     protocol.CommonHeader{"path": "/index/page/"},
+				headers:     protocol.CommonHeader{protocol.MosnHeaderPathKey: "/index/page/"},
 				matchedPath: "/index/",
 			},
-			want: protocol.CommonHeader{"path": "/abc/page/", "x-mosn-original-path": "/index/page/"},
+			want: protocol.CommonHeader{protocol.MosnHeaderPathKey: "/abc/page/", protocol.MosnOriginalHeaderPathKey: "/index/page/"},
 		},
 	}
 
@@ -284,6 +299,7 @@ func Test_RouteRuleImplBase_finalizePathHeader(t *testing.T) {
 				t.Errorf("(rri *RouteRuleImplBase) finalizePathHeader(headers map[string]string, matchedPath string) = %v, want %v", tt.args.headers, tt.want)
 			}
 		})
+
 	}
 }
 
@@ -576,5 +592,94 @@ func Test_RouteRuleImplBase_FinalizeResponseHeaders(t *testing.T) {
 				t.Errorf("(rri *RouteRuleImplBase) FinalizeResponseHeaders(headers map[string]string, requestInfo types.RequestInfo) = %v, want %v", tt.args.headers, tt.want)
 			}
 		})
+	}
+}
+
+func TestRouteRuleImplBase_UpdateMetaDataMatchCriteria(t *testing.T) {
+	originMetadatas := []struct {
+		originMetadata map[string]string
+	}{
+		{
+			originMetadata: map[string]string{"origin": "test"},
+		},
+		{
+			originMetadata: map[string]string{},
+		},
+	}
+
+	updatedMetadatas := []struct {
+		updatedMetadata map[string]string
+	}{
+		{
+			updatedMetadata: map[string]string{
+				"label": "green", "version": "v1", "appInfo": "test",
+			},
+		},
+		{
+			updatedMetadata: map[string]string{},
+		},
+	}
+
+	tests := []struct {
+		name            string
+		updatedMetadata map[string]string
+		origin          *RouteRuleImplBase
+		want            *RouteRuleImplBase
+	}{
+		{
+			name: "common case",
+			origin: &RouteRuleImplBase{
+				metadataMatchCriteria: NewMetadataMatchCriteriaImpl(originMetadatas[0].originMetadata),
+				metaData:              GetClusterMosnLBMetaDataMap(originMetadatas[0].originMetadata),
+			},
+			updatedMetadata: updatedMetadatas[0].updatedMetadata,
+			want: &RouteRuleImplBase{
+				metadataMatchCriteria: NewMetadataMatchCriteriaImpl(updatedMetadatas[0].updatedMetadata),
+				metaData:              GetClusterMosnLBMetaDataMap(updatedMetadatas[0].updatedMetadata),
+			},
+		},
+		{
+			name: "corner case1",
+			origin: &RouteRuleImplBase{
+				metadataMatchCriteria: NewMetadataMatchCriteriaImpl(originMetadatas[0].originMetadata),
+				metaData:              GetClusterMosnLBMetaDataMap(originMetadatas[0].originMetadata),
+			},
+			updatedMetadata: updatedMetadatas[1].updatedMetadata,
+			want: &RouteRuleImplBase{
+				metadataMatchCriteria: NewMetadataMatchCriteriaImpl(updatedMetadatas[1].updatedMetadata),
+				metaData:              GetClusterMosnLBMetaDataMap(updatedMetadatas[1].updatedMetadata),
+			},
+		},
+		{
+			name: "corner case2",
+			origin: &RouteRuleImplBase{
+				metadataMatchCriteria: NewMetadataMatchCriteriaImpl(originMetadatas[1].originMetadata),
+				metaData:              GetClusterMosnLBMetaDataMap(originMetadatas[1].originMetadata),
+			},
+			updatedMetadata: updatedMetadatas[1].updatedMetadata,
+			want: &RouteRuleImplBase{
+				metadataMatchCriteria: NewMetadataMatchCriteriaImpl(updatedMetadatas[0].updatedMetadata),
+				metaData:              GetClusterMosnLBMetaDataMap(updatedMetadatas[0].updatedMetadata),
+			},
+		},
+		{
+			name: "corner case3",
+			origin: &RouteRuleImplBase{
+				metadataMatchCriteria: NewMetadataMatchCriteriaImpl(originMetadatas[1].originMetadata),
+				metaData:              GetClusterMosnLBMetaDataMap(originMetadatas[1].originMetadata),
+			},
+			updatedMetadata: updatedMetadatas[1].updatedMetadata,
+			want: &RouteRuleImplBase{
+				metadataMatchCriteria: NewMetadataMatchCriteriaImpl(updatedMetadatas[1].updatedMetadata),
+				metaData:              GetClusterMosnLBMetaDataMap(updatedMetadatas[1].updatedMetadata),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		if reflect.DeepEqual(tt.origin.UpdateMetaDataMatchCriteria(tt.updatedMetadata), tt.want) {
+			t.Errorf("TestRouteRuleImplBase_UpdateMetaDataMatchCriteria,error!")
+		}
+
 	}
 }

@@ -30,6 +30,12 @@ import (
 
 type ContentKey string
 
+// Tracing configuration for a server
+type TracingConfig struct {
+	Enable bool   `json:"enable"`
+	Tracer string `json:"tracer"`
+}
+
 // ServerConfig for making up server for mosn
 type ServerConfig struct {
 	//default logger
@@ -65,9 +71,17 @@ type MOSNConfig struct {
 	ClusterManager  ClusterManagerConfig   `json:"cluster_manager,omitempty"` //cluster config
 	ServiceRegistry v2.ServiceRegistryInfo `json:"service_registry"`          //service registry config, used by service discovery module
 	//tracing config
+	Tracing             TracingConfig       `json:"tracing"`
 	RawDynamicResources jsoniter.RawMessage `json:"dynamic_resources,omitempty"` //dynamic_resources raw message
 	RawStaticResources  jsoniter.RawMessage `json:"static_resources,omitempty"`  //static_resources raw message
-	RawAdmin            jsoniter.RawMessage `json:"admin,omitempty""`            // admin raw message
+	RawAdmin            jsoniter.RawMessage `json:"admin,omitempty"`             // admin raw message
+	Debug               PProfConfig         `json:"pprof,omitempty"`
+}
+
+// PProfConfig is used to start a pprof server for debug
+type PProfConfig struct {
+	StartDebug bool `json:"debug"`      // If StartDebug is true, start a pprof, default is false
+	Port       int  `json:"port_value"` // If port value is 0, will use 9090 as default
 }
 
 // Mode is mosn's starting type

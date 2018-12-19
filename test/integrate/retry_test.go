@@ -9,8 +9,8 @@ import (
 
 	"github.com/alipay/sofa-mosn/pkg/mosn"
 	"github.com/alipay/sofa-mosn/pkg/protocol"
-	"github.com/alipay/sofa-mosn/pkg/protocol/sofarpc"
-	"github.com/alipay/sofa-mosn/pkg/protocol/sofarpc/codec"
+	"github.com/alipay/sofa-mosn/pkg/protocol/rpc/sofarpc"
+	"github.com/alipay/sofa-mosn/pkg/protocol/rpc/sofarpc/codec"
 	"github.com/alipay/sofa-mosn/pkg/types"
 	"github.com/alipay/sofa-mosn/test/util"
 )
@@ -104,23 +104,20 @@ type BadHTTPHandler struct{}
 
 func (h *BadHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
-	for k := range r.Header {
-		w.Header().Set(k, r.Header.Get(k))
-	}
 	w.WriteHeader(http.StatusInternalServerError)
 	fmt.Fprintf(w, "\nRequestId:%s\n", r.Header.Get("Requestid"))
 }
 
 func ServeBadBoltV1(t *testing.T, conn net.Conn) {
 	response := func(iobuf types.IoBuffer) ([]byte, bool) {
-		cmd, _ := codec.BoltV1.GetDecoder().Decode(nil, iobuf)
+		cmd, _ := codec.BoltCodec.Decode(nil, iobuf)
 		if cmd == nil {
 			return nil, false
 		}
-		if req, ok := cmd.(*sofarpc.BoltRequestCommand); ok {
+		if req, ok := cmd.(*sofarpc.BoltRequest); ok {
 			resp := util.BuildBoltV1Response(req)
 			resp.ResponseStatus = sofarpc.RESPONSE_STATUS_SERVER_EXCEPTION
-			iobufresp, err := codec.BoltV1.GetEncoder().EncodeHeaders(nil, resp)
+			iobufresp, err := codec.BoltCodec.Encode(nil, resp)
 			if err != nil {
 				t.Errorf("Build response error: %v\n", err)
 				return nil, true
@@ -143,12 +140,14 @@ func TestRetry(t *testing.T) {
 		NewRetryCase(t, protocol.HTTP1, protocol.HTTP2, false),
 		NewRetryCase(t, protocol.HTTP2, protocol.HTTP1, false),
 		NewRetryCase(t, protocol.HTTP2, protocol.HTTP2, false),
+		NewRetryCase(t, protocol.MHTTP2, protocol.MHTTP2, false),
 		NewRetryCase(t, protocol.SofaRPC, protocol.HTTP1, false),
 		NewRetryCase(t, protocol.SofaRPC, protocol.HTTP2, false),
 		NewRetryCase(t, protocol.SofaRPC, protocol.SofaRPC, false),
 		// A server is shutdown
 		NewRetryCase(t, protocol.HTTP1, protocol.HTTP1, true),
 		NewRetryCase(t, protocol.HTTP1, protocol.HTTP2, true),
+		NewRetryCase(t, protocol.MHTTP2, protocol.MHTTP2, true),
 		// HTTP2 and SofaRPC will create connection to upstream before send request to upstream
 		// If upstream is closed, it will failed directly, and we cannot do a retry before we send a request to upstream
 		/*
@@ -185,8 +184,9 @@ func TestRetryProxy(t *testing.T) {
 	testCases := []*RetryCase{
 		NewRetryCase(t, protocol.HTTP1, protocol.HTTP1, false),
 		NewRetryCase(t, protocol.HTTP2, protocol.HTTP2, false),
+		NewRetryCase(t, protocol.MHTTP2, protocol.MHTTP2, false),
 		NewRetryCase(t, protocol.SofaRPC, protocol.SofaRPC, false),
-		NewRetryCase(t, protocol.HTTP1, protocol.HTTP1, true),
+		//NewRetryCase(t, protocol.HTTP1, protocol.HTTP1, true),
 		//NewRetryCase(t, protocol.HTTP2, protocol.HTTP2, true),
 		//NewRetryCase(t, protocol.SofaRPC, protocol.SofaRPC, true),
 	}
