@@ -327,21 +327,22 @@ func convertStreamFaultInjectConfig(s *types.Struct) (map[string]interface{}, er
 	}
 
 	var fixed_delay time.Duration
-	if d := faultConfig.Delay.GetFixedDelay(); d != nil {
+	if d := faultConfig.GetDelay().GetFixedDelay(); d != nil {
 		fixed_delay = *d
 	}
+
 	streamFault := &v2.StreamFaultInject{
 		Delay: &v2.DelayInject{
 			DelayInjectConfig: v2.DelayInjectConfig{
-				Percent: faultConfig.Delay.GetPercent(),
+				Percent: faultConfig.GetDelay().GetPercentage().GetNumerator(),
 				DelayDurationConfig: v2.DurationConfig{
 					Duration: fixed_delay,
 				},
 			},
 		},
 		Abort: &v2.AbortInject{
-			Percent: faultConfig.Abort.GetPercent(),
-			Status:  int(faultConfig.Abort.GetHttpStatus()),
+			Percent: faultConfig.GetAbort().GetPercentage().GetNumerator(),
+			Status:  int(faultConfig.GetAbort().GetHttpStatus()),
 		},
 		UpstreamCluster: faultConfig.UpstreamCluster,
 		Headers:         convertHeaders(faultConfig.GetHeaders()),
@@ -661,17 +662,17 @@ func convertRouteMatch(xdsRouteMatch xdsroute.RouteMatch) v2.RouterMatch {
 		Path:          xdsRouteMatch.GetPath(),
 		Regex:         xdsRouteMatch.GetRegex(),
 		CaseSensitive: xdsRouteMatch.GetCaseSensitive().GetValue(),
-		Runtime:       convertRuntime(xdsRouteMatch.GetRuntime()),
+		Runtime:       convertRuntime(xdsRouteMatch.GetRuntimeFraction()),
 		Headers:       convertHeaders(xdsRouteMatch.GetHeaders()),
 	}
 }
 
-func convertRuntime(xdsRuntime *xdscore.RuntimeUInt32) v2.RuntimeUInt32 {
+func convertRuntime(xdsRuntime *xdscore.RuntimeFractionalPercent) v2.RuntimeUInt32 {
 	if xdsRuntime == nil {
 		return v2.RuntimeUInt32{}
 	}
 	return v2.RuntimeUInt32{
-		DefaultValue: xdsRuntime.GetDefaultValue(),
+		DefaultValue: xdsRuntime.GetDefaultValue().GetNumerator(),
 		RuntimeKey:   xdsRuntime.GetRuntimeKey(),
 	}
 }
@@ -682,10 +683,16 @@ func convertHeaders(xdsHeaders []*xdsroute.HeaderMatcher) []v2.HeaderMatcher {
 	}
 	headerMatchers := make([]v2.HeaderMatcher, 0, len(xdsHeaders))
 	for _, xdsHeader := range xdsHeaders {
+		isRegex := false
+		value := xdsHeader.GetExactMatch()
+		if len(xdsHeader.GetRegexMatch()) > 0 {
+			isRegex = true
+			value = xdsHeader.GetRegexMatch()
+		}
 		headerMatcher := v2.HeaderMatcher{
 			Name:  xdsHeader.GetName(),
-			Value: xdsHeader.GetExactMatch(),
-			Regex: xdsHeader.GetRegex().GetValue(),
+			Value: value,
+			Regex: isRegex,
 		}
 
 		// as pseudo headers not support when Http1.x upgrade to Http2, change pseudo headers to normal headers
