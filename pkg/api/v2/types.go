@@ -50,10 +50,11 @@ type ClusterType string
 
 // Group of cluster type
 const (
-	STATIC_CLUSTER  ClusterType = "STATIC"
-	SIMPLE_CLUSTER  ClusterType = "SIMPLE"
-	DYNAMIC_CLUSTER ClusterType = "DYNAMIC"
-	EDS_CLUSTER     ClusterType = "EDS"
+	STATIC_CLUSTER       ClusterType = "STATIC"
+	SIMPLE_CLUSTER       ClusterType = "SIMPLE"
+	DYNAMIC_CLUSTER      ClusterType = "DYNAMIC"
+	EDS_CLUSTER          ClusterType = "EDS"
+	ORIGINAL_DST_CLUSTER ClusterType = "ORIGINAL_DST";
 )
 
 // LbType
@@ -61,8 +62,9 @@ type LbType string
 
 // Group of load balancer type
 const (
-	LB_RANDOM     LbType = "LB_RANDOM"
-	LB_ROUNDROBIN LbType = "LB_ROUNDROBIN"
+	LB_RANDOM       LbType = "LB_RANDOM"
+	LB_ROUNDROBIN   LbType = "LB_ROUNDROBIN"
+	LB_ORIGINAL_DST LbType = "LB_ORIGINAL_DST"
 )
 
 // RoutingPriority
@@ -89,6 +91,7 @@ type Cluster struct {
 	LBSubSetConfig       LBSubsetConfig   `json:"lb_subset_config,omitempty"`
 	TLS                  TLSConfig        `json:"tls_context,omitempty"`
 	Hosts                []Host           `json:"hosts"`
+	CleanupInterval      time.Duration    `json:"cleanup_interval"`
 }
 
 // HealthCheck is a configuration of health check

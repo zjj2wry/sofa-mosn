@@ -36,18 +36,19 @@ type subSetLoadBalancer struct {
 	originalPrioritySet   types.PrioritySet
 	fallbackSubset        *LBSubsetEntry    // subset entry generated according to fallback policy
 	subSets               types.LbSubsetMap // final trie-like structure used to stored easily searched subset
+	clusterInfo           types.ClusterInfo
 }
 
-func NewSubsetLoadBalancer(lbType types.LoadBalancerType, prioritySet types.PrioritySet, stats types.ClusterStats,
-	subsets types.LBSubsetInfo) types.SubSetLoadBalancer {
+func NewSubsetLoadBalancer(clusterInfo types.ClusterInfo, prioritySet types.PrioritySet) types.SubSetLoadBalancer {
 
 	ssb := &subSetLoadBalancer{
-		lbType:                lbType,
-		fallBackPolicy:        subsets.FallbackPolicy(),
-		defaultSubSetMetadata: GenerateDftSubsetKeys(subsets.DefaultSubset()), //ordered subset metadata pair, value为md5 hash值
-		subSetKeys:            subsets.SubsetKeys(),
+		lbType:                clusterInfo.LbType(),
+		fallBackPolicy:        clusterInfo.LbSubsetInfo().FallbackPolicy(),
+		defaultSubSetMetadata: GenerateDftSubsetKeys(clusterInfo.LbSubsetInfo().DefaultSubset()), //ordered subset metadata pair, value为md5 hash值
+		subSetKeys:            clusterInfo.LbSubsetInfo().SubsetKeys(),
 		originalPrioritySet:   prioritySet,
-		stats:                 stats,
+		stats:                 clusterInfo.Stats(),
+		clusterInfo:           clusterInfo,
 	}
 
 	ssb.subSets = make(map[string]types.ValueSubsetMap)
@@ -495,7 +496,7 @@ func NewPrioritySubsetImpl(subsetLB *subSetLoadBalancer, predicate types.HostPre
 		psi.Update(i, subsetLB.originalPrioritySet.HostSetsByPriority()[i].Hosts(), []types.Host{})
 	}
 
-	psi.loadbalancer = NewLoadBalancer(subsetLB.lbType, psi.prioritySubset)
+	psi.loadbalancer = NewLoadBalancer(subsetLB.clusterInfo, psi.prioritySubset)
 
 	return psi
 }

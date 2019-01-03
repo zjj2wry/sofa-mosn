@@ -1011,6 +1011,10 @@ func (s *downStream) DownstreamConnection() net.Conn {
 	return s.proxy.readCallbacks.Connection().RawConn()
 }
 
+func (s *downStream) GetRestoredRemoteAddress() net.Addr {
+	return s.proxy.readCallbacks.Connection().RemoteAddr()
+}
+
 func (s *downStream) DownstreamHeaders() types.HeaderMap {
 	return s.downstreamReqHeaders
 }

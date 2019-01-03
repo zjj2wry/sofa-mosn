@@ -26,8 +26,9 @@ type LoadBalancerType string
 
 // The load balancer's types
 const (
-	RoundRobin LoadBalancerType = "RoundRobin"
-	Random     LoadBalancerType = "Random"
+	RoundRobin  LoadBalancerType = "RoundRobin"
+	Random      LoadBalancerType = "Random"
+	OriginalDst LoadBalancerType = "OriginalDst"
 )
 
 // LoadBalancer is a upstream load balancer.
@@ -50,6 +51,9 @@ type LoadBalancerContext interface {
 
 	// DownstreamHeaders returns the downstream headers map.
 	DownstreamHeaders() HeaderMap
+
+	// GetResotredRestoreAddress returns the restored remote address
+	GetRestoredRemoteAddress() net.Addr
 }
 
 // SubSetLoadBalancer is a subset of LoadBalancer

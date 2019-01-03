@@ -20,6 +20,7 @@ package cluster
 import (
 	"net"
 	"sync"
+	"time"
 
 	"github.com/alipay/sofa-mosn/pkg/api/v2"
 	"github.com/alipay/sofa-mosn/pkg/log"
@@ -49,6 +50,8 @@ func NewCluster(clusterConfig v2.Cluster, sourceAddr net.Addr, addedViaAPI bool)
 
 	case v2.SIMPLE_CLUSTER, v2.DYNAMIC_CLUSTER, v2.EDS_CLUSTER:
 		newCluster = newSimpleInMemCluster(clusterConfig, sourceAddr, addedViaAPI)
+	case v2.ORIGINAL_DST_CLUSTER:
+		newCluster = newOriginalDstCluster(clusterConfig, sourceAddr, addedViaAPI)
 	default:
 		return nil
 	}
@@ -75,6 +78,7 @@ func newCluster(clusterConfig v2.Cluster, sourceAddr net.Addr, addedViaAPI bool,
 			connBufferLimitBytes: clusterConfig.ConnBufferLimitBytes,
 			stats:                newClusterStats(clusterConfig.Name),
 			lbSubsetInfo:         NewLBSubsetInfo(&clusterConfig.LBSubSetConfig), // new subset load balancer info
+			cleanupInterval:      clusterConfig.CleanupInterval,
 		},
 		initHelper: initHelper,
 	}
@@ -85,6 +89,9 @@ func newCluster(clusterConfig v2.Cluster, sourceAddr net.Addr, addedViaAPI bool,
 
 	case v2.LB_ROUNDROBIN:
 		cluster.info.lbType = types.RoundRobin
+
+	case v2.LB_ORIGINAL_DST:
+		cluster.info.lbType = types.OriginalDst
 	}
 
 	// TODO: init more props: maxrequestsperconn, connecttimeout, connectionbuflimit
@@ -100,12 +107,10 @@ func newCluster(clusterConfig v2.Cluster, sourceAddr net.Addr, addedViaAPI bool,
 
 	if cluster.Info().LbSubsetInfo().IsEnabled() {
 		// use subset loadbalancer
-		lb = NewSubsetLoadBalancer(cluster.Info().LbType(), cluster.PrioritySet(), cluster.Info().Stats(),
-			cluster.Info().LbSubsetInfo())
-
+		lb = NewSubsetLoadBalancer(cluster.Info(), cluster.PrioritySet())
 	} else {
 		// use common loadbalancer
-		lb = NewLoadBalancer(cluster.Info().LbType(), cluster.PrioritySet())
+		lb = NewLoadBalancer(cluster.Info(), cluster.PrioritySet())
 	}
 
 	cluster.info.lbInstance = lb
@@ -200,6 +205,7 @@ type clusterInfo struct {
 	healthCheckProtocol  string
 	tlsMng               types.TLSContextManager
 	lbSubsetInfo         types.LBSubsetInfo
+	cleanupInterval      time.Duration
 }
 
 func NewClusterInfo() types.ClusterInfo {
@@ -272,6 +278,10 @@ func (ci *clusterInfo) LbSubsetInfo() types.LBSubsetInfo {
 
 func (ci *clusterInfo) LBInstance() types.LoadBalancer {
 	return ci.lbInstance
+}
+
+func (ci *clusterInfo) CleanupInterval() time.Duration {
+	return ci.cleanupInterval
 }
 
 type prioritySet struct {

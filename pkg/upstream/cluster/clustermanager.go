@@ -286,6 +286,9 @@ func (cm *clusterManager) RemovePrimaryCluster(clusterName string) error {
 		if !v.(*primaryCluster).addedViaAPI {
 			return fmt.Errorf("Remove Primary Cluster Failed, Cluster Name = %s not addedViaAPI", clusterName)
 		}
+		if originalDstCluster, ok := v.(*originalDstCluster); ok {
+			originalDstCluster.stop()
+		}
 		cm.primaryClusters.Delete(clusterName)
 		log.DefaultLogger.Debugf("Remove Primary Cluster, Cluster Name = %s", clusterName)
 		return nil

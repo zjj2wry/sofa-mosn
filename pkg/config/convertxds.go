@@ -125,6 +125,10 @@ func convertClustersConfig(xdsClusters []*xdsapi.Cluster) []*v2.Cluster {
 			Spec:                 convertSpec(xdsCluster),
 			TLS:                  convertTLS(xdsCluster.GetTlsContext()),
 		}
+		if xdsCluster.GetCleanupInterval() != nil {
+			cluster.CleanupInterval = *xdsCluster.GetCleanupInterval()
+			log.DefaultLogger.Tracef("cleanup interval of cluster %s is %s", cluster.Name, cluster.CleanupInterval.String())
+		}
 
 		clusters = append(clusters, cluster)
 	}
@@ -862,6 +866,7 @@ func convertClusterType(xdsClusterType xdsapi.Cluster_DiscoveryType) v2.ClusterT
 	case xdsapi.Cluster_EDS:
 		return v2.EDS_CLUSTER
 	case xdsapi.Cluster_ORIGINAL_DST:
+		return v2.ORIGINAL_DST_CLUSTER
 	}
 	//log.DefaultLogger.Fatalf("unsupported cluster type: %s, exchange to SIMPLE_CLUSTER", xdsClusterType.String())
 	return v2.SIMPLE_CLUSTER
@@ -876,6 +881,7 @@ func convertLbPolicy(xdsLbPolicy xdsapi.Cluster_LbPolicy) v2.LbType {
 	case xdsapi.Cluster_RANDOM:
 		return v2.LB_RANDOM
 	case xdsapi.Cluster_ORIGINAL_DST_LB:
+		return v2.LB_ORIGINAL_DST
 	case xdsapi.Cluster_MAGLEV:
 	}
 	//log.DefaultLogger.Fatalf("unsupported lb policy: %s, exchange to LB_RANDOM", xdsLbPolicy.String())
