@@ -171,7 +171,7 @@ func (mmcti *MetadataMatchCriteriaImpl) Swap(i, j int) {
 		mmcti.MatchCriteriaArray[i]
 }
 
-// Used to generate metadata match criteria from config
+// Used to generate metadata match criteria from config  用来生成字典序排列的用于匹配的 metadata
 func (mmcti *MetadataMatchCriteriaImpl) extractMetadataMatchCriteria(parent *MetadataMatchCriteriaImpl,
 	metadataMatches map[string]string) {
 

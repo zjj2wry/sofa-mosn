@@ -37,7 +37,7 @@ type LoadBalancer interface {
 	ChooseHost(context LoadBalancerContext) Host
 }
 
-// LoadBalancerContext contains the information for choose a host
+// LoadBalancerContext contains the subset information to choose a host
 type LoadBalancerContext interface {
 	// ComputeHashKey computes an optional hash key to use during load balancing
 	ComputeHashKey() HashedValue
