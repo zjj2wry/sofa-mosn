@@ -40,6 +40,7 @@ import (
 	xdshttpfault "github.com/envoyproxy/go-control-plane/envoy/config/filter/http/fault/v2"
 	xdshttp "github.com/envoyproxy/go-control-plane/envoy/config/filter/network/http_connection_manager/v2"
 	xdstcp "github.com/envoyproxy/go-control-plane/envoy/config/filter/network/tcp_proxy/v2"
+	xdstype "github.com/envoyproxy/go-control-plane/envoy/type"
 	xdsutil "github.com/envoyproxy/go-control-plane/pkg/util"
 	"github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/jsonpb"
@@ -325,6 +326,11 @@ func convertStreamFaultInjectConfig(s *types.Struct) (map[string]interface{}, er
 	if err := xdsutil.StructToMessage(s, faultConfig); err != nil {
 		return nil, err
 	}
+	// another FractionalPercent_DenominatorType would be support later
+	if !percentageCheck(faultConfig.GetDelay().GetPercentage().GetDenominator()) || !percentageCheck(faultConfig.GetAbort().GetPercentage().GetDenominator()) {
+		log.DefaultLogger.Errorf("only FractionalPercent_HUNDRED support")
+		return nil, nil
+	}
 
 	var fixed_delay time.Duration
 	if d := faultConfig.GetDelay().GetFixedDelay(); d != nil {
@@ -348,6 +354,13 @@ func convertStreamFaultInjectConfig(s *types.Struct) (map[string]interface{}, er
 		Headers:         convertHeaders(faultConfig.GetHeaders()),
 	}
 	return makeJsonMap(streamFault)
+}
+
+func percentageCheck(denominatorType xdstype.FractionalPercent_DenominatorType) bool {
+	if denominatorType != xdstype.FractionalPercent_HUNDRED {
+		return false
+	}
+	return true
 }
 
 func makeJsonMap(v interface{}) (map[string]interface{}, error) {
@@ -669,6 +682,11 @@ func convertRouteMatch(xdsRouteMatch xdsroute.RouteMatch) v2.RouterMatch {
 
 func convertRuntime(xdsRuntime *xdscore.RuntimeFractionalPercent) v2.RuntimeUInt32 {
 	if xdsRuntime == nil {
+		return v2.RuntimeUInt32{}
+	}
+	// another FractionalPercent_DenominatorType would be support later
+	if !percentageCheck(xdsRuntime.GetDefaultValue().GetDenominator()) {
+		log.DefaultLogger.Errorf("only FractionalPercent_HUNDRED support")
 		return v2.RuntimeUInt32{}
 	}
 	return v2.RuntimeUInt32{
