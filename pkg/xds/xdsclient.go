@@ -59,12 +59,11 @@ func UnmarshalResources(config *config.MOSNConfig) (dynamicResources *bootstrap.
 	if len(config.RawDynamicResources) > 0 {
 		dynamicResources = &bootstrap.Bootstrap_DynamicResources{}
 		resources := map[string]jsoniter.RawMessage{}
-		err = json.Unmarshal([]byte(config.RawDynamicResources), dynamicResources)
+		err = json.Unmarshal([]byte(config.RawDynamicResources), &resources)
 		if err != nil {
 			log.DefaultLogger.Errorf("fail to unmarshal dynamic_resources: %v", err)
 			return nil, nil, err
 		}
-
 		if _, ok := resources["ads_config"]; ok {
 			var b []byte
 			b, err = json.Marshal(&resources)
@@ -72,6 +71,7 @@ func UnmarshalResources(config *config.MOSNConfig) (dynamicResources *bootstrap.
 				log.DefaultLogger.Errorf("fail to marshal ads_config: %v", err)
 				return nil, nil, err
 			}
+
 			err = jsonpb.UnmarshalString(string(b), dynamicResources)
 			if err != nil {
 				log.DefaultLogger.Errorf("fail to marshal dynamic_resources: %v", err)
