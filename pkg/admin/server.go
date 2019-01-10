@@ -43,6 +43,10 @@ func configDump(ctx *fasthttp.RequestCtx) {
 	}
 }
 
+func getListeners(ctx *fasthttp.RequestCtx) {
+	ctx.Write(Listeners())
+}
+
 var levelMap = map[string]log.Level{
 	"FATAL": log.FATAL,
 	"ERROR": log.ERROR,
@@ -72,6 +76,8 @@ func requestHandler(ctx *fasthttp.RequestCtx) {
 		configDump(ctx)
 	case path == "/api/v1/logging" && method == "POST":
 		setLogLevel(ctx)
+	case path == "/listeners" && method == "GET":
+		getListeners(ctx)
 	default:
 		ctx.SetStatusCode(404)
 	}

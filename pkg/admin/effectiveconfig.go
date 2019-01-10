@@ -18,6 +18,9 @@
 package admin
 
 import (
+	"bytes"
+	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/alipay/sofa-mosn/pkg/api/v2"
@@ -86,4 +89,18 @@ func Dump() ([]byte, error) {
 	mutex.RLock()
 	defer mutex.RUnlock()
 	return json.Marshal(conf)
+}
+
+// Listeners return all listener name
+func Listeners() []byte {
+	mutex.RLock()
+	defer mutex.RUnlock()
+	var buffer bytes.Buffer
+	buffer.WriteString("[")
+	for name, _ := range conf.Listener {
+		item := fmt.Sprintf("\"%s\"", strings.Replace(name, "_", ":", 1))
+		buffer.WriteString(item)
+	}
+	buffer.WriteString("]")
+	return buffer.Bytes()
 }

@@ -43,8 +43,6 @@ func (adsClient *ADSClient) sendThread() {
 		adsClient.reconnect()
 	}
 
-	refreshDelay := adsClient.AdsConfig.RefreshDelay
-	t1 := time.NewTimer(*refreshDelay)
 	for {
 		select {
 		case <-adsClient.SendControlChan:
@@ -52,13 +50,6 @@ func (adsClient *ADSClient) sendThread() {
 			adsClient.AdsConfig.closeADSStreamClient()
 			adsClient.StopChan <- 1
 			return
-		case <-t1.C:
-			err := adsClient.V2Client.reqClusters(adsClient.StreamClient)
-			if err != nil {
-				log.DefaultLogger.Warnf("send thread request cds fail!auto retry next period")
-				adsClient.reconnect()
-			}
-			t1.Reset(*refreshDelay)
 		}
 	}
 }
@@ -89,6 +80,11 @@ func (adsClient *ADSClient) receiveThread() {
 				log.DefaultLogger.Infof("get %d listeners from LDS", len(listeners))
 				adsClient.MosnConfig.OnAddOrUpdateListeners(listeners)
 
+				err = adsClient.V2Client.reqListeners(adsClient.StreamClient)
+				if err != nil {
+					log.DefaultLogger.Warnf("send thread request lds fail!auto retry next period")
+				}
+
 				err = adsClient.V2Client.reqRoutes(adsClient.StreamClient)
 				if err != nil {
 					log.DefaultLogger.Warnf("send thread request rds fail!auto retry next period")
@@ -105,6 +101,11 @@ func (adsClient *ADSClient) receiveThread() {
 					if cluster.Type == envoy_api_v2.Cluster_EDS {
 						clusterNames = append(clusterNames, cluster.Name)
 					}
+				}
+
+				err := adsClient.V2Client.reqClusters(adsClient.StreamClient)
+				if err != nil {
+					log.DefaultLogger.Warnf("send thread request cds fail!auto retry next period")
 				}
 
 				err = adsClient.V2Client.reqEndpoints(adsClient.StreamClient, clusterNames)

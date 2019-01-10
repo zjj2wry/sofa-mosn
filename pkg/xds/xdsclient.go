@@ -59,43 +59,19 @@ func UnmarshalResources(config *config.MOSNConfig) (dynamicResources *bootstrap.
 	if len(config.RawDynamicResources) > 0 {
 		dynamicResources = &bootstrap.Bootstrap_DynamicResources{}
 		resources := map[string]jsoniter.RawMessage{}
-		err = json.Unmarshal([]byte(config.RawDynamicResources), &resources)
+		err = json.Unmarshal([]byte(config.RawDynamicResources), dynamicResources)
 		if err != nil {
 			log.DefaultLogger.Errorf("fail to unmarshal dynamic_resources: %v", err)
 			return nil, nil, err
 		}
-		if adsConfigRaw, ok := resources["ads_config"]; ok {
-			var b []byte
-			adsConfig := map[string]jsoniter.RawMessage{}
-			err = json.Unmarshal([]byte(adsConfigRaw), &adsConfig)
-			if err != nil {
-				log.DefaultLogger.Errorf("fail to unmarshal ads_config: %v", err)
-				return nil, nil, err
-			}
-			if refreshDelayRaw, ok := adsConfig["refresh_delay"]; ok {
-				refreshDelay := types.Duration{}
-				err = json.Unmarshal([]byte(refreshDelayRaw), &refreshDelay)
-				if err != nil {
-					log.DefaultLogger.Errorf("fail to unmarshal refresh_delay: %v", err)
-					return nil, nil, err
-				}
 
-				d := duration2String(&refreshDelay)
-				b, err = json.Marshal(&d)
-				adsConfig["refresh_delay"] = jsoniter.RawMessage(b)
-			}
-			b, err = json.Marshal(&adsConfig)
-			if err != nil {
-				log.DefaultLogger.Errorf("fail to marshal refresh_delay: %v", err)
-				return nil, nil, err
-			}
-			resources["ads_config"] = jsoniter.RawMessage(b)
+		if _, ok := resources["ads_config"]; ok {
+			var b []byte
 			b, err = json.Marshal(&resources)
 			if err != nil {
 				log.DefaultLogger.Errorf("fail to marshal ads_config: %v", err)
 				return nil, nil, err
 			}
-
 			err = jsonpb.UnmarshalString(string(b), dynamicResources)
 			if err != nil {
 				log.DefaultLogger.Errorf("fail to marshal dynamic_resources: %v", err)
@@ -144,21 +120,6 @@ func UnmarshalResources(config *config.MOSNConfig) (dynamicResources *bootstrap.
 				}
 				cluster["circuit_breakers"] = jsoniter.RawMessage(b)
 
-				if connectTimeoutRaw, ok := cluster["connect_timeout"]; ok {
-					connectTimeout := types.Duration{}
-					err = json.Unmarshal([]byte(connectTimeoutRaw), &connectTimeout)
-					if err != nil {
-						log.DefaultLogger.Errorf("fail to unmarshal connect_timeout: %v", err)
-						return nil, nil, err
-					}
-					d := duration2String(&connectTimeout)
-					b, err = json.Marshal(&d)
-					if err != nil {
-						log.DefaultLogger.Errorf("fail to marshal connect_timeout: %v", err)
-						return nil, nil, err
-					}
-					cluster["connect_timeout"] = jsoniter.RawMessage(b)
-				}
 				b, err = json.Marshal(&cluster)
 				if err != nil {
 					log.DefaultLogger.Errorf("fail to marshal cluster: %v", err)
