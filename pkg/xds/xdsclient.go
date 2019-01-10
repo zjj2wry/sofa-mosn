@@ -145,12 +145,12 @@ func UnmarshalResources(config *config.MOSNConfig) (dynamicResources *bootstrap.
 				cluster["circuit_breakers"] = jsoniter.RawMessage(b)
 
 				if connectTimeoutRaw, ok := cluster["connect_timeout"]; ok {
-					connectTimeout := types.Duration{}
+					connectTimeout := types.Duration{Seconds:30}
 					err = json.Unmarshal([]byte(connectTimeoutRaw), &connectTimeout)
-					if err != nil {
-						log.DefaultLogger.Errorf("fail to unmarshal connect_timeout: %v", err)
-						return nil, nil, err
-					}
+					//if err != nil {
+					//	log.DefaultLogger.Errorf("fail to unmarshal connect_timeout: %v", err)
+					//	return nil, nil, err
+					//}
 					d := duration2String(&connectTimeout)
 					b, err = json.Marshal(&d)
 					if err != nil {
