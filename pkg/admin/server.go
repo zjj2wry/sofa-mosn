@@ -82,7 +82,7 @@ func requestHandler(ctx *fasthttp.RequestCtx) {
 		setLogLevel(ctx)
 	case path == "/listeners" && method == "GET":
 		getListeners(ctx)
-	case path == "stats" && method == "GET":
+	case path == "/stats" && method == "GET":
 		getStats(ctx)
 	default:
 		ctx.SetStatusCode(404)
