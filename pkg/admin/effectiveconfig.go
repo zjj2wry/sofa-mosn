@@ -97,7 +97,13 @@ func Listeners() []byte {
 	defer mutex.RUnlock()
 	var buffer bytes.Buffer
 	buffer.WriteString("[")
+	firstItem := true
 	for name, _ := range conf.Listener {
+		if firstItem {
+			firstItem = false
+		}else{
+			buffer.WriteString(",")
+		}
 		item := fmt.Sprintf("\"%s\"", strings.Replace(name, "_", ":", 1))
 		buffer.WriteString(item)
 	}
