@@ -26,6 +26,11 @@ import (
 	"github.com/alipay/sofa-mosn/pkg/api/v2"
 )
 
+const (
+	statCdsUpdates = "cluster_manager.cds.update_success"
+	statLdsUpdates = "listener_manager.lds.update_success"
+)
+
 type effectiveConfig struct {
 	MOSNConfig interface{}            `json:"mosn_config,omitempty"`
 	Listener   map[string]v2.Listener `json:"listener,omitempty"`
@@ -109,4 +114,12 @@ func Listeners() []byte {
 	}
 	buffer.WriteString("]")
 	return buffer.Bytes()
+}
+
+// Stats return stats message
+func Stats() string {
+	mutex.RLock()
+	defer mutex.RUnlock()
+	stats := fmt.Sprintf("%s: %d\n%s: %d\n", statCdsUpdates, len(conf.Cluster), statLdsUpdates, len(conf.Listener))
+	return stats
 }

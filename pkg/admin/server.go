@@ -47,6 +47,10 @@ func getListeners(ctx *fasthttp.RequestCtx) {
 	ctx.Write(Listeners())
 }
 
+func getStats(ctx *fasthttp.RequestCtx) {
+	ctx.WriteString(Stats())
+}
+
 var levelMap = map[string]log.Level{
 	"FATAL": log.FATAL,
 	"ERROR": log.ERROR,
@@ -78,6 +82,8 @@ func requestHandler(ctx *fasthttp.RequestCtx) {
 		setLogLevel(ctx)
 	case path == "/listeners" && method == "GET":
 		getListeners(ctx)
+	case path == "stats" && method == "GET":
+		getStats(ctx)
 	default:
 		ctx.SetStatusCode(404)
 	}
