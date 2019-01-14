@@ -31,26 +31,19 @@ import (
 func (adsClient *ADSClient) Start() {
 	adsClient.StreamClient = adsClient.AdsConfig.GetStreamClient()
 	adsClient.MosnConfig = &config.MOSNConfig{}
-	go adsClient.sendThread()
+	adsClient.sendRequest()
 	go adsClient.receiveThread()
 }
 
-func (adsClient *ADSClient) sendThread() {
-	log.DefaultLogger.Tracef("send thread request cds")
-	err := adsClient.V2Client.reqClusters(adsClient.StreamClient)
-	if err != nil {
-		log.DefaultLogger.Warnf("send thread request cds fail!auto retry next period")
-		adsClient.reconnect()
-	}
-
+func (adsClient *ADSClient) sendRequest() {
 	for {
-		select {
-		case <-adsClient.SendControlChan:
-			log.DefaultLogger.Tracef("send thread receive graceful shut down signal")
-			adsClient.AdsConfig.closeADSStreamClient()
-			adsClient.StopChan <- 1
-			return
+		log.DefaultLogger.Tracef("request cds")
+		err := adsClient.V2Client.reqClusters(adsClient.StreamClient)
+		if err != nil {
+			log.DefaultLogger.Warnf("request cds fail! retry after 1s")
+			adsClient.reconnect()
 		}
+		break
 	}
 }
 
@@ -65,12 +58,14 @@ func (adsClient *ADSClient) receiveThread() {
 			if adsClient.StreamClient == nil {
 				log.DefaultLogger.Warnf("stream client closed, sleep 1s and wait for reconnect")
 				time.Sleep(time.Second)
+				adsClient.sendRequest()
 				continue
 			}
 			resp, err := adsClient.StreamClient.Recv()
 			if err != nil {
-				log.DefaultLogger.Warnf("get resp timeout: %v, retry after 1s", err)
+				log.DefaultLogger.Warnf("get resp error: %v, reconnect and retry after 1s", err)
 				time.Sleep(time.Second)
+				adsClient.sendRequest()
 				continue
 			}
 			typeURL := resp.TypeUrl
@@ -80,14 +75,11 @@ func (adsClient *ADSClient) receiveThread() {
 				log.DefaultLogger.Infof("get %d listeners from LDS", len(listeners))
 				adsClient.MosnConfig.OnAddOrUpdateListeners(listeners)
 
-				err = adsClient.V2Client.reqListeners(adsClient.StreamClient)
-				if err != nil {
-					log.DefaultLogger.Warnf("send thread request lds fail!auto retry next period")
-				}
-
 				err = adsClient.V2Client.reqRoutes(adsClient.StreamClient)
 				if err != nil {
-					log.DefaultLogger.Warnf("send thread request rds fail!auto retry next period")
+					log.DefaultLogger.Warnf("request rds fail! reconnect and retry after 1s")
+					time.Sleep(time.Second)
+					adsClient.sendRequest()
 				}
 
 			} else if typeURL == "type.googleapis.com/envoy.api.v2.Cluster" {
@@ -103,14 +95,11 @@ func (adsClient *ADSClient) receiveThread() {
 					}
 				}
 
-				err := adsClient.V2Client.reqClusters(adsClient.StreamClient)
-				if err != nil {
-					log.DefaultLogger.Warnf("send thread request cds fail!auto retry next period")
-				}
-
 				err = adsClient.V2Client.reqEndpoints(adsClient.StreamClient, clusterNames)
 				if err != nil {
-					log.DefaultLogger.Warnf("send thread request eds fail!auto retry next period")
+					log.DefaultLogger.Warnf("request eds fail! reconnect and retry after 1s")
+					time.Sleep(time.Second)
+					adsClient.sendRequest()
 				}
 
 			} else if typeURL == "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment" {
@@ -121,7 +110,9 @@ func (adsClient *ADSClient) receiveThread() {
 
 				err = adsClient.V2Client.reqListeners(adsClient.StreamClient)
 				if err != nil {
-					log.DefaultLogger.Warnf("send thread request lds fail!auto retry next period")
+					log.DefaultLogger.Warnf("request lds fail! reconnect and retry after 1s")
+					time.Sleep(time.Second)
+					adsClient.sendRequest()
 				}
 
 			} else if typeURL == "type.googleapis.com/envoy.api.v2.RouteConfiguration" {

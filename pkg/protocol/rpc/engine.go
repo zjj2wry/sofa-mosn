@@ -21,6 +21,7 @@ import (
 	"context"
 
 	"github.com/alipay/sofa-mosn/pkg/log"
+	_ "github.com/alipay/sofa-mosn/pkg/protocol/rpc/xprotocol/dubbo"
 	"github.com/alipay/sofa-mosn/pkg/types"
 )
 
