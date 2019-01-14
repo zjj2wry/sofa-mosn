@@ -32,5 +32,5 @@ const (
 	APP_NAME               string = "appName"
 	SPAN_TYPE              string = "spanType"
 	BAGGAGE_DATA           string = "baggageData"
-	REQUEST_URL string = "requestURL"
+	REQUEST_URL            string = "requestURL"
 )

@@ -19,8 +19,8 @@ package http
 
 import (
 	"context"
-	"sync/atomic"
 	"sync"
+	"sync/atomic"
 
 	"bufio"
 	"errors"

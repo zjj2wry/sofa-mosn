@@ -90,7 +90,7 @@ type streamConnection struct {
 	streamConnectionEventListener       types.StreamConnectionEventListener
 	serverStreamConnectionEventListener types.ServerStreamConnectionEventListener
 
-	logger 			log.Logger
+	logger log.Logger
 }
 
 func newStreamConnection(ctx context.Context, connection types.Connection, clientCallbacks types.StreamConnectionEventListener,
@@ -298,11 +298,11 @@ type stream struct {
 	ctx context.Context
 	sc  *streamConnection
 
-	id        	uint64
-	direction 	StreamDirection // 0: out, 1: in
-	receiver	types.StreamReceiveListener
-	sendCmd 	sofarpc.SofaRpcCmd
-	sendBuf 	types.IoBuffer
+	id        uint64
+	direction StreamDirection // 0: out, 1: in
+	receiver  types.StreamReceiveListener
+	sendCmd   sofarpc.SofaRpcCmd
+	sendBuf   types.IoBuffer
 }
 
 // ~~ types.Stream

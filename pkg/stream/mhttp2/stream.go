@@ -28,6 +28,7 @@ import (
 	"reflect"
 	"strconv"
 
+	"bytes"
 	"github.com/alipay/sofa-mosn/pkg/buffer"
 	"github.com/alipay/sofa-mosn/pkg/log"
 	"github.com/alipay/sofa-mosn/pkg/module/http2"
@@ -36,7 +37,6 @@ import (
 	"github.com/alipay/sofa-mosn/pkg/protocol/mhttp2"
 	str "github.com/alipay/sofa-mosn/pkg/stream"
 	"github.com/alipay/sofa-mosn/pkg/types"
-	"bytes"
 )
 
 func init() {
@@ -108,8 +108,8 @@ func (conn *streamConnection) GoAway() {
 type stream struct {
 	str.BaseStream
 
-	ctx                 context.Context
-	receiver            types.StreamReceiveListener
+	ctx      context.Context
+	receiver types.StreamReceiveListener
 
 	id       uint32
 	sendData []types.IoBuffer

@@ -98,7 +98,7 @@ type http2common struct{}
 func (c *http2common) ConvHeader(ctx context.Context, headerMap types.HeaderMap) (types.HeaderMap, error) {
 	headers := mhttp2.DecodeHeader(headerMap)
 	direction := ""
-	switch  headerMap.(type) {
+	switch headerMap.(type) {
 	case *mhttp2.ReqHeader:
 		direction = protocol.Request
 	case *mhttp2.RspHeader:

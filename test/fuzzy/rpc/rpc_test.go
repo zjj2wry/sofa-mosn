@@ -12,16 +12,16 @@ import (
 
 	_ "github.com/alipay/sofa-mosn/pkg/filter/network/proxy"
 	"github.com/alipay/sofa-mosn/pkg/log"
+	"github.com/alipay/sofa-mosn/pkg/protocol/rpc"
+	"github.com/alipay/sofa-mosn/pkg/protocol/rpc/sofarpc"
 	_ "github.com/alipay/sofa-mosn/pkg/protocol/rpc/sofarpc/codec"
+	_ "github.com/alipay/sofa-mosn/pkg/protocol/rpc/sofarpc/conv"
 	_ "github.com/alipay/sofa-mosn/pkg/stream/http"
 	_ "github.com/alipay/sofa-mosn/pkg/stream/mhttp2"
 	_ "github.com/alipay/sofa-mosn/pkg/stream/sofarpc"
-	_ "github.com/alipay/sofa-mosn/pkg/protocol/rpc/sofarpc/conv"
 	"github.com/alipay/sofa-mosn/pkg/types"
 	"github.com/alipay/sofa-mosn/test/fuzzy"
 	"github.com/alipay/sofa-mosn/test/util"
-	"github.com/alipay/sofa-mosn/pkg/protocol/rpc/sofarpc"
-	"github.com/alipay/sofa-mosn/pkg/protocol/rpc"
 )
 
 var (

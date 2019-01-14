@@ -139,7 +139,6 @@ func TestTLSExtend(t *testing.T) {
 
 		// protocol auto
 		&tlsExtendCase{NewTestCase(t, protocol.MHTTP2, protocol.Auto, testutil.NewUpstreamHTTP2(t, appaddr, nil))},
-
 	}
 	for i, tc := range testCases {
 		t.Logf("start case #%d\n", i)

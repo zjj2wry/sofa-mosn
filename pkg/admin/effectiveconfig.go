@@ -106,7 +106,7 @@ func Listeners() []byte {
 	for name, _ := range conf.Listener {
 		if firstItem {
 			firstItem = false
-		}else{
+		} else {
 			buffer.WriteString(",")
 		}
 		item := fmt.Sprintf("\"%s\"", strings.Replace(name, "_", ":", 1))

@@ -41,7 +41,9 @@ func (adsClient *ADSClient) sendRequest() {
 		err := adsClient.V2Client.reqClusters(adsClient.StreamClient)
 		if err != nil {
 			log.DefaultLogger.Warnf("request cds fail! retry after 1s")
+			time.Sleep(time.Second)
 			adsClient.reconnect()
+			continue
 		}
 		break
 	}
