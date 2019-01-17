@@ -30,14 +30,17 @@ const (
 	DefaultMaxPendingRequests = uint64(10240)
 	DefaultMaxRequests        = uint64(10240)
 	DefaultMaxRetries         = uint64(3)
+	// 0 indicates no maximum.
+	DefaultMaxRequestsPerConnection = uint64(0)
 )
 
 // ResourceManager
 type resourcemanager struct {
-	connections     *resource
-	pendingRequests *resource
-	requests        *resource
-	retries         *resource
+	connections              *resource
+	pendingRequests          *resource
+	requests                 *resource
+	retries                  *resource
+	maxRequestsPerConnection *resource
 }
 
 func NewResourceManager(circuitBreakers v2.CircuitBreakers) types.ResourceManager {
@@ -45,6 +48,7 @@ func NewResourceManager(circuitBreakers v2.CircuitBreakers) types.ResourceManage
 	maxPendingRequests := DefaultMaxPendingRequests
 	maxRequests := DefaultMaxRequests
 	maxRetries := DefaultMaxRetries
+	maxRequestsPerConnection := DefaultMaxRequestsPerConnection
 
 	// note: we don't support group cb by priority
 	if circuitBreakers.Thresholds != nil && len(circuitBreakers.Thresholds) > 0 {
@@ -52,6 +56,7 @@ func NewResourceManager(circuitBreakers v2.CircuitBreakers) types.ResourceManage
 		maxPendingRequests = uint64(circuitBreakers.Thresholds[0].MaxPendingRequests)
 		maxRequests = uint64(circuitBreakers.Thresholds[0].MaxRequests)
 		maxRetries = uint64(circuitBreakers.Thresholds[0].MaxRetries)
+		maxRequestsPerConnection = uint64(circuitBreakers.Thresholds[0].MaxRequestsPerConnection)
 	}
 
 	return &resourcemanager{
@@ -66,6 +71,9 @@ func NewResourceManager(circuitBreakers v2.CircuitBreakers) types.ResourceManage
 		},
 		retries: &resource{
 			max: maxRetries,
+		},
+		maxRequestsPerConnection: &resource{
+			max: maxRequestsPerConnection,
 		},
 	}
 }
@@ -84,6 +92,10 @@ func (rm *resourcemanager) Requests() types.Resource {
 
 func (rm *resourcemanager) Retries() types.Resource {
 	return rm.retries
+}
+
+func (rm *resourcemanager) MaxRequestsPerConnection() types.Resource {
+	return rm.maxRequestsPerConnection
 }
 
 // Resource

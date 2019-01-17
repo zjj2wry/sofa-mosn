@@ -207,11 +207,12 @@ type CircuitBreakers struct {
 }
 
 type Thresholds struct {
-	Priority           RoutingPriority `json:"priority"`
-	MaxConnections     uint32          `json:"max_connections"`
-	MaxPendingRequests uint32          `json:"max_pending_requests"`
-	MaxRequests        uint32          `json:"max_requests"`
-	MaxRetries         uint32          `json:"max_retries"`
+	Priority                 RoutingPriority `json:"priority"`
+	MaxConnections           uint32          `json:"max_connections"`
+	MaxPendingRequests       uint32          `json:"max_pending_requests"`
+	MaxRequests              uint32          `json:"max_requests"`
+	MaxRetries               uint32          `json:"max_retries"`
+	MaxRequestsPerConnection uint32          `json:"max_requests_per_connection"`
 }
 
 // OutlierDetection not used yet

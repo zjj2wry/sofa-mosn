@@ -41,7 +41,8 @@ type connPool struct {
 	activeClient *activeClient
 	host         types.Host
 
-	mux sync.Mutex
+	drainClients []*activeClient
+	mux          sync.Mutex
 }
 
 // NewConnPool
@@ -55,9 +56,20 @@ func (p *connPool) Protocol() types.Protocol {
 	return protocol.MHTTP2
 }
 
+func (p *connPool) activeMoveToDrain() {
+	if p.activeClient.client.ActiveRequestsNum() != 0 {
+		p.drainClients = append(p.drainClients, p.activeClient)
+	}
+	p.activeClient = nil
+}
+
 func (p *connPool) NewStream(ctx context.Context,
 	responseDecoder types.StreamReceiveListener, listener types.PoolEventListener) {
 	p.mux.Lock()
+	maxStreams := p.host.ClusterInfo().ResourceManager().MaxRequestsPerConnection().Max()
+	if maxStreams != 0 && p.activeClient != nil && p.activeClient.totalStream >= maxStreams {
+		p.activeMoveToDrain()
+	}
 	if p.activeClient == nil {
 		p.activeClient = newActiveClient(ctx, p)
 	}
@@ -94,6 +106,11 @@ func (p *connPool) Close() {
 	if p.activeClient != nil {
 		p.activeClient.client.Close()
 	}
+	for _, drainClient := range p.drainClients {
+		if drainClient != nil {
+			drainClient.client.Close()
+		}
+	}
 }
 
 func (p *connPool) onConnectionEvent(client *activeClient, event types.ConnectionEvent) {
@@ -108,15 +125,28 @@ func (p *connPool) onConnectionEvent(client *activeClient, event types.Connectio
 				p.host.ClusterInfo().Stats().UpstreamConnectionRemoteCloseWithActiveRequest.Inc(1)
 			}
 		}
-		p.activeClient = nil
+		p.clearActiveClient(client)
 	} else if event == types.ConnectTimeout {
 		p.host.HostStats().UpstreamRequestTimeout.Inc(1)
 		p.host.ClusterInfo().Stats().UpstreamRequestTimeout.Inc(1)
 		client.client.Close()
-		p.activeClient = nil
+		p.clearActiveClient(client)
 	} else if event == types.ConnectFailed {
 		p.host.HostStats().UpstreamConnectionConFail.Inc(1)
 		p.host.ClusterInfo().Stats().UpstreamConnectionConFail.Inc(1)
+		p.clearActiveClient(client)
+	}
+}
+
+func (p *connPool) clearActiveClient(client *activeClient) {
+	for i, drainClient := range p.drainClients {
+		if drainClient == client {
+			p.drainClients[i] = nil
+			p.drainClients = append(p.drainClients[:i],p.drainClients[i+1:]...)
+			break
+		}
+	}
+	if p.activeClient == client {
 		p.activeClient = nil
 	}
 }
@@ -125,6 +155,14 @@ func (p *connPool) onStreamDestroy(client *activeClient) {
 	p.host.HostStats().UpstreamRequestActive.Dec(1)
 	p.host.ClusterInfo().Stats().UpstreamRequestActive.Dec(1)
 	p.host.ClusterInfo().ResourceManager().Requests().Decrease()
+	for i, drainClient := range p.drainClients {
+		if drainClient == client && drainClient.client.ActiveRequestsNum() == 0{
+			p.drainClients[i].client.Close()
+			p.drainClients[i] = nil
+			p.drainClients = append(p.drainClients[:i],p.drainClients[i+1:]...)
+			break
+		}
+	}
 }
 
 func (p *connPool) onStreamReset(client *activeClient, reason types.StreamResetReason) {

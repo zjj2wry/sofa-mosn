@@ -170,10 +170,19 @@ func (p *connPool) onStreamDestroy(client *activeClient) {
 	p.host.ClusterInfo().Stats().UpstreamRequestActive.Dec(1)
 	p.host.ClusterInfo().ResourceManager().Requests().Decrease()
 
-	// return to pool
 	p.clientMux.Lock()
+	defer p.clientMux.Unlock()
+	if p.host.ClusterInfo().ResourceManager().MaxRequestsPerConnection().Max() != 0 {
+		client.remainRequests--
+		if client.remainRequests == 0 {
+			// drain connection without check error
+			client.host.Connection.RawConn().Close()
+			p.totalClientCount--
+			return
+		}
+	}
+	// return to pool
 	p.availableClients = append(p.availableClients, client)
-	p.clientMux.Unlock()
 }
 
 func (p *connPool) onStreamReset(client *activeClient, reason types.StreamResetReason) {
@@ -215,6 +224,7 @@ type activeClient struct {
 	host               types.CreateConnectionData
 	totalStream        uint64
 	closeWithActiveReq bool
+	remainRequests     uint64
 }
 
 func newActiveClient(ctx context.Context, pool *connPool) (*activeClient, types.PoolFailureReason) {
@@ -229,6 +239,7 @@ func newActiveClient(ctx context.Context, pool *connPool) (*activeClient, types.
 
 	ac.client = codecClient
 	ac.host = data
+	ac.remainRequests = pool.host.ClusterInfo().ResourceManager().MaxRequestsPerConnection().Max()
 
 	if err := ac.host.Connection.Connect(true); err != nil {
 		return nil, types.ConnectionFailure

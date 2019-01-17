@@ -277,6 +277,9 @@ type ResourceManager interface {
 
 	// Retries resource to count retries
 	Retries() Resource
+
+	// Max Request Per Connection to count request on connection
+	MaxRequestsPerConnection() Resource
 }
 
 // Resource is a interface to statistics information
