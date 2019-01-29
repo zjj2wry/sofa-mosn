@@ -23,7 +23,6 @@ import (
 
 	"bufio"
 	"errors"
-	"io"
 	"net/http"
 	"runtime/debug"
 	"strconv"
@@ -37,7 +36,13 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-var errConnClose = errors.New("connection closed")
+var (
+	errConnClose = errors.New("connection closed")
+
+	HKConnection = []byte("Connection") // header key 'Connection'
+	HVKeepAlive  = []byte("keep-alive") // header value 'keep-alive'
+)
+
 
 func init() {
 	str.Register(protocol.HTTP1, &streamConnFactory{})
@@ -116,8 +121,10 @@ type streamConnection struct {
 
 // types.StreamConnection
 func (conn *streamConnection) Dispatch(buffer types.IoBuffer) {
-	conn.bufChan <- buffer
-	<-conn.bufChan
+	for buffer.Len() > 0 {
+		conn.bufChan <- buffer
+		<-conn.bufChan
+	}
 }
 
 func (conn *streamConnection) Protocol() types.Protocol {
@@ -211,18 +218,32 @@ func (csc *clientStreamConnection) serve() {
 
 		err := response.Read(csc.br)
 		if err != nil {
-			if err != errConnClose && err != io.EOF {
+			if csc.stream != nil {
+				csc.stream.ResetStream(types.StreamRemoteReset)
 				log.DefaultLogger.Errorf("Http client codec goroutine error: %s", err)
 			}
 			return
 		}
 
+
 		// 2. response processing
 		s := csc.stream
 		s.response = response
 
+		resetConn := false
+		if s.response.ConnectionClose() {
+			resetConn = true
+		}
+
 		if atomic.LoadInt32(&s.readDisableCount) <= 0 {
 			s.handleResponse()
+		}
+
+		// local reset
+		if resetConn {
+			// close connection
+			s.connection.conn.Close(types.NoFlush, types.LocalClose)
+			return
 		}
 	}
 }
@@ -265,10 +286,10 @@ func newServerStreamConnection(context context.Context, connection types.Connect
 		serverStreamConnCallbacks: callbacks,
 	}
 
+	connection.AddConnectionEventListener(ssc)
+
 	ssc.br = bufio.NewReader(ssc)
 	ssc.bw = bufio.NewWriter(ssc)
-
-	connection.AddConnectionEventListener(ssc)
 
 	go func() {
 		defer func() {
@@ -292,7 +313,8 @@ func (ssc *serverStreamConnection) serve() {
 		request := fasthttp.AcquireRequest()
 		err := request.Read(ssc.br)
 		if err != nil {
-			if err != errConnClose && err != io.EOF {
+			if ssc.stream != nil {
+				ssc.stream.ResetStream(types.StreamRemoteReset)
 				log.DefaultLogger.Errorf("Http server codec goroutine error: %s", err)
 			}
 			return
@@ -365,8 +387,11 @@ func (s *stream) RemoveEventListener(streamCb types.StreamEventListener) {
 }
 
 func (s *stream) ResetStream(reason types.StreamResetReason) {
-	for _, cb := range s.streamCbs {
-		cb.OnResetStream(reason)
+	// reset caused by connection closed, i.o triggered by IO goroutine, should be sequenced in serve goroutine
+	if reason != types.StreamConnectionFailed && reason != types.StreamConnectionTermination {
+		for _, cb := range s.streamCbs {
+			cb.OnResetStream(reason)
+		}
 	}
 }
 
@@ -392,7 +417,7 @@ func (s *clientStream) AppendHeaders(context context.Context, headersIn types.He
 	uri := ""
 
 	// path
-	if path, ok := headers.Get(protocol.MosnHeaderPathKey); ok {
+	if path, ok := headers.Get(protocol.MosnHeaderPathKey); ok && path != "" {
 		headers.Del(protocol.MosnHeaderPathKey)
 		uri += path
 	} else {
@@ -400,7 +425,7 @@ func (s *clientStream) AppendHeaders(context context.Context, headersIn types.He
 	}
 
 	// querystring
-	if queryString, ok := headers.Get(protocol.MosnHeaderQueryStringKey); ok {
+	if queryString, ok := headers.Get(protocol.MosnHeaderQueryStringKey); ok && queryString != "" {
 		headers.Del(protocol.MosnHeaderQueryStringKey)
 		uri += "?" + queryString
 	}
@@ -473,7 +498,7 @@ func (s *clientStream) doSend() {
 
 func (s *clientStream) handleResponse() {
 	if s.response != nil {
-		header := mosnhttp.ResponseHeader{&s.response.Header}
+		header := mosnhttp.ResponseHeader{&s.response.Header, nil}
 
 		statusCode := header.StatusCode()
 		status := strconv.Itoa(statusCode)
@@ -561,8 +586,25 @@ func (s *serverStream) AppendTrailers(context context.Context, trailers types.He
 }
 
 func (s *serverStream) endStream() {
+	resetConn := false
+	// check if we need close connection
+	if s.request.Header.ConnectionClose() {
+		s.response.SetConnectionClose()
+		resetConn = true
+	} else if !s.request.Header.IsHTTP11() {
+		// Set 'Connection: keep-alive' response header for non-HTTP/1.1 request.
+		// There is no need in setting this header for http/1.1, since in http/1.1
+		// connections are keep-alive by default.
+		s.response.Header.SetCanonical(HKConnection, HVKeepAlive)
+	}
+
 	s.doSend()
 	s.responseDoneChan <- true
+
+	if resetConn {
+		// close connection
+		s.connection.conn.Close(types.FlushWrite, types.LocalClose)
+	}
 
 	// clean up & recycle
 	s.connection.stream = nil
@@ -594,7 +636,7 @@ func (s *serverStream) handleRequest() {
 	if s.request != nil {
 
 		// header
-		header := mosnhttp.RequestHeader{&s.request.Header}
+		header := mosnhttp.RequestHeader{&s.request.Header, nil}
 
 		// set non-header info in request-line, like method, uri
 		uri := s.request.URI()
@@ -607,7 +649,10 @@ func (s *serverStream) handleRequest() {
 		// 4. path
 		header.Set(protocol.MosnHeaderPathKey, string(uri.Path()))
 		// 5. querystring
-		header.Set(protocol.MosnHeaderQueryStringKey, string(uri.QueryString()))
+		qs := uri.QueryString()
+		if len(qs) > 0 {
+			header.Set(protocol.MosnHeaderQueryStringKey, string(qs))
+		}
 
 		hasData := true
 		if len(s.request.Body()) == 0 {
