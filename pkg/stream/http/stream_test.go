@@ -192,5 +192,5 @@ func convertHeader(payload protocol.CommonHeader) http.RequestHeader {
 		headerImpl.Set(k, v)
 	}
 
-	return http.RequestHeader{headerImpl}
+	return http.RequestHeader{headerImpl, nil}
 }
