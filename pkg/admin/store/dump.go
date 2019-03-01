@@ -15,34 +15,16 @@
  * limitations under the License.
  */
 
-package config
+package store
 
-import (
-	"io/ioutil"
-	"github.com/alipay/sofa-mosn/pkg/admin/store"
-	"github.com/alipay/sofa-mosn/pkg/log"
-)
+import "sync"
 
-func dump(dirty bool) {
-	store.DumpLock()
-	defer store.DumpUnlock()
+var fileMutex = new(sync.Mutex)
 
-	if dirty {
-		//log.DefaultLogger.Println("dump config to: ", configPath)
-		log.DefaultLogger.Debugf("dump config content: %+v", config)
+func DumpLock() {
+	fileMutex.Lock()
+}
 
-		//update mosn_config
-		store.SetMOSNConfig(config)
-		//todo: ignore zero values in config struct @boqin
-		content, err := json.MarshalIndent(config, "", "  ")
-		if err == nil {
-			err = ioutil.WriteFile(configPath, content, 0644)
-		}
-
-		if err != nil {
-			log.DefaultLogger.Errorf("dump config failed, caused by: " + err.Error())
-		}
-	} else {
-		log.DefaultLogger.Infof("config is clean no needed to dump")
-	}
+func DumpUnlock() {
+	fileMutex.Unlock()
 }

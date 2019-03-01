@@ -172,19 +172,28 @@ func NewMosn(c *config.MOSNConfig) *Mosn {
 		if _, err := reconfigure.Write([]byte{0}); err != nil {
 			log.StartLogger.Fatalln("graceful failed, exit")
 		}
+
+		buf := make([]byte, 1)
+		n, err := reconfigure.Read(buf)
+		if n != 1 {
+			log.StartLogger.Fatalln("old mosn StopService failed: %v", err)
+		}
+		// start other services
+		store.StartService()
+
 		reconfigure.Close()
 
 		// transfer old mosn connections
 		go network.TransferServer(m.servers[0].Handler())
 		// transfer old mosn mertrics, none-block
 		go metrics.TransferServer(server.GracefulTimeout, nil)
+	} else {
+		// start other services
+		store.StartService()
 	}
 
 	// write pid file
 	server.WritePidFile()
-
-	// start other services
-	go store.StartService()
 
 	return m
 }

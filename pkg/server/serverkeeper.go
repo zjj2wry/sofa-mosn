@@ -27,6 +27,8 @@ import (
 	"syscall"
 	"time"
 
+	"net"
+
 	"github.com/alipay/sofa-mosn/pkg/admin/store"
 	"github.com/alipay/sofa-mosn/pkg/log"
 	"github.com/alipay/sofa-mosn/pkg/metrics"
@@ -59,7 +61,7 @@ func SetPid(pid string) {
 }
 
 func storeOldPid() {
-	if b, err := ioutil.ReadFile(pidFile); err == nil {
+	if b, err := ioutil.ReadFile(pidFile); err == nil && len(b) > 0 {
 		// delete "\n"
 		oldPid, _ = strconv.Atoi(string(b[0 : len(b)-1]))
 	}
@@ -70,7 +72,7 @@ func WritePidFile() (err error) {
 
 	os.MkdirAll(MosnBasePath, 0644)
 
-	if err = ioutil.WriteFile(pidFile, pid, 0644); err!= nil {
+	if err = ioutil.WriteFile(pidFile, pid, 0644); err != nil {
 		log.DefaultLogger.Errorf("write pid file error: %v", err)
 	}
 	return err
@@ -187,8 +189,15 @@ func startNewMosn() error {
 }
 
 func reconfigure(start bool) {
+	// set mosn State Reconfiguring
 	store.SetMosnState(store.Reconfiguring)
+	// if reconfigure failed, set mosn state to Running
 	defer store.SetMosnState(store.Running)
+
+	// stop dump config file
+	store.DumpLock()
+	// if reconfigure failed, enable dump
+	defer store.DumpUnlock()
 
 	if start {
 		err := startNewMosn()
@@ -198,12 +207,21 @@ func reconfigure(start bool) {
 	}
 
 	// transfer listen fd
-	if err := sendInheritListeners(); err != nil {
+	var notify net.Conn
+	var err error
+	if notify, err = sendInheritListeners(); err != nil {
 		return
 	}
 
 	// stop other services
 	store.StopService()
+
+	// nofity new mosn to startService()
+	if _, err := notify.Write([]byte{0}); err != nil {
+		log.DefaultLogger.Errorf("nofity new mosn to startService() failed :%v", err)
+		store.StartService()
+		return
+	}
 
 	// Wait for new mosn start
 	time.Sleep(3 * time.Second)

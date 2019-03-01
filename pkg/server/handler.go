@@ -639,14 +639,14 @@ func (ac *activeConnection) OnEvent(event types.ConnectionEvent) {
 	}
 }
 
-func sendInheritListeners() error {
+func sendInheritListeners() (net.Conn, error) {
 	files := ListListenersFile()
 	if files == nil {
-		return nil
+		return nil, errors.New("ListListenersFile() error")
 	}
 	if len(files) > 100 {
 		log.DefaultLogger.Errorf("InheritListener fd too many :%d", len(files))
-		return errors.New("InheritListeners too many")
+		return nil, errors.New("InheritListeners too many")
 	}
 	fds := make([]int, len(files))
 	for i, f := range files {
@@ -667,9 +667,8 @@ func sendInheritListeners() error {
 	}
 	if err != nil {
 		log.DefaultLogger.Errorf("sendInheritListeners Dial unix failed %v", err)
-		return err
+		return nil, err
 	}
-	defer unixConn.Close()
 
 	uc := unixConn.(*net.UnixConn)
 	buf := make([]byte, 1)
@@ -677,19 +676,19 @@ func sendInheritListeners() error {
 	n, oobn, err := uc.WriteMsgUnix(buf, rights, nil)
 	if err != nil {
 		log.DefaultLogger.Errorf("WriteMsgUnix: %v", err)
-		return err
+		return nil, err
 	}
 	if n != len(buf) || oobn != len(rights) {
 		log.DefaultLogger.Errorf("WriteMsgUnix = %d, %d; want 1, %d", n, oobn, len(rights))
-		return err
+		return nil, err
 	}
 	uc.SetReadDeadline(time.Now().Add(10 * time.Minute))
 	n, err = uc.Read(buf)
-	if n == 0 {
+	if n != 1 {
 		log.DefaultLogger.Errorf("new mosn start failed")
-		return err
+		return nil, err
 	}
-	return nil
+	return uc, nil
 }
 
 func GetInheritListeners() ([]*v2.Listener, net.Conn, error) {
