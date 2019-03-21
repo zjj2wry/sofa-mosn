@@ -37,6 +37,7 @@ import (
 	"github.com/alipay/sofa-mosn/pkg/protocol/http"
 	"github.com/alipay/sofa-mosn/pkg/router"
 	"github.com/alipay/sofa-mosn/pkg/types"
+	"runtime/debug"
 )
 
 // types.StreamEventListener
@@ -83,7 +84,7 @@ type downStream struct {
 	// 1. at the end of upstream response 2. by a upstream reset due to exceptions, such as no healthy upstream, connection close, etc.
 	upstreamProcessDone bool
 
-	upstreamRecvDone chan struct{}
+	notify chan struct{}
 
 	filterStage int
 
@@ -91,6 +92,8 @@ type downStream struct {
 	downstreamCleaned uint32
 	upstreamReset     uint32
 	reuseBuffer       uint32
+
+	resetReason types.StreamResetReason
 
 	// ~~~ filters
 	senderFilters   []*activeStreamSenderFilter
@@ -125,7 +128,7 @@ func newActiveStream(ctx context.Context, proxy *proxy, responseSender types.Str
 	stream.responseSender.GetStream().AddEventListener(stream)
 	stream.context = ctx
 	stream.reuseBuffer = 1
-	stream.upstreamRecvDone = make(chan struct{}, 1)
+	stream.notify = make(chan struct{}, 1)
 
 	stream.logger = log.ByContext(proxy.context)
 
@@ -224,14 +227,19 @@ func (s *downStream) OnResetStream(reason types.StreamResetReason) {
 		return
 	}
 
-	workerPool.Offer(&event{
-		id:  s.ID,
-		dir: downstream,
-		evt: reset,
-		handle: func() {
-			s.ResetStream(reason)
-		},
-	}, false)
+	s.resetReason = reason
+
+	s.sendNotify()
+	/*
+		workerPool.Offer(&event{
+			id:  s.ID,
+			dir: downstream,
+			evt: reset,
+			handle: func() {
+				s.ResetStream(reason)
+			},
+		}, false)
+	*/
 }
 
 func (s *downStream) ResetStream(reason types.StreamResetReason) {
@@ -242,7 +250,6 @@ func (s *downStream) ResetStream(reason types.StreamResetReason) {
 
 func (s *downStream) OnDestroyStream() {}
 
-
 func (s *downStream) OnDecode(ctx context.Context, headers types.HeaderMap, data types.IoBuffer, trailers types.HeaderMap) {
 	if data != nil {
 		s.downstreamReqDataBuf = data.Clone()
@@ -250,50 +257,58 @@ func (s *downStream) OnDecode(ctx context.Context, headers types.HeaderMap, data
 		data.Drain(data.Len())
 	}
 
+	id := s.ID
 	// goroutine for proxy
 	pool.ScheduleAuto(func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.DefaultLogger.Errorf("downStream OnDecode panic %v", r)
+				log.DefaultLogger.Errorf("downStream OnDecode panic %v, downstream %p old id: %d, new id: %d",
+					r, s, id, s.ID)
+				debug.PrintStack()
 			}
 		}()
+
+		s.logger.Debugf("downstream OnDecode send upstream request %+v", headers)
 
 		// send upstream request
 		if headers != nil {
 			s.ReceiveHeaders(headers, s.downstreamReqDataBuf == nil && trailers == nil)
 		}
 
-		if s.downstreamReqDataBuf != nil {
+		if data != nil {
 			s.ReceiveData(s.downstreamReqDataBuf, trailers == nil)
 		}
-
 
 		if trailers != nil {
 			s.ReceiveTrailers(trailers)
 		}
 
-		// wait upstream response
-		<- s.upstreamRecvDone
+		// wait notify
+		if !s.waitNotify(id) {
+			return
+		}
 
-		log.DefaultLogger.Infof("downstream OnDecodeAll %v", s.downstreamRespHeaders)
-		s.upstreamRequest.endStream()
+		s.logger.Debugf("downstream OnDecode send downstream response %+v", s.downstreamRespHeaders)
+
+		respHeaders := s.downstreamRespHeaders
+		respData := s.downstreamRespDataBuf
+		respTrailers := s.downstreamRespTrailers
+
 		// send downstream response
-		if s.downstreamRespHeaders != nil {
-			// we convert a status to http standard code, and log it
-			if code, err := protocol.MappingHeaderStatusCode(s.upstreamRequest.protocol, headers); err == nil {
-				s.requestInfo.SetResponseCode(code)
-			}
-			s.requestInfo.SetResponseReceivedDuration(time.Now())
-			s.onUpstreamHeaders(s.downstreamRespHeaders, s.downstreamRespDataBuf == nil && s.downstreamRespTrailers == nil)
+		if respHeaders != nil {
+			s.upstreamRequest.ReceiveHeaders(respHeaders, respData == nil && respTrailers == nil)
 		}
 
-		if s.downstreamRespDataBuf != nil {
-			s.onUpstreamData(s.downstreamRespDataBuf, trailers == nil)
+		if respData != nil {
+			s.upstreamRequest.ReceiveData(respData, respTrailers == nil)
 		}
 
-		if s.downstreamRespTrailers != nil {
-			s.onUpstreamTrailers(trailers)
+		if respTrailers != nil {
+			s.upstreamRequest.ReceiveTrailers(respTrailers)
 		}
+
+		// process notify
+		s.processNotify(id)
 	})
 }
 
@@ -779,10 +794,6 @@ func (s *downStream) doAppendTrailers(filter *activeStreamSenderFilter, trailers
 
 // ~~~ upstream event handler
 func (s *downStream) onUpstreamReset(reason types.StreamResetReason) {
-	if !atomic.CompareAndSwapUint32(&s.upstreamReset, 0, 1) {
-		return
-	}
-
 	// todo: update stats
 	log.DefaultLogger.Tracef("on upstream reset invoked")
 
@@ -935,16 +946,20 @@ func (s *downStream) onUpstreamResponseRecvFinished() {
 }
 
 func (s *downStream) setupRetry(endStream bool) bool {
-	if !s.upstreamRequestSent {
-		return false
-	}
+	/*
+		if !s.upstreamRequestSent {
+			return false
+		}
+	*/
 	s.upstreamRequest.setupRetry = true
 
 	if !endStream {
 		s.upstreamRequest.resetStream()
 	}
 
-	s.upstreamRequest.requestSender = nil
+	/*
+		s.upstreamRequest.requestSender = nil
+	*/
 
 	// reset per req timer
 	if s.perRetryTimer != nil {
@@ -1005,7 +1020,7 @@ func (s *downStream) resetStream() {
 }
 
 func (s *downStream) sendHijackReply(code int, headers types.HeaderMap) {
-	s.logger.Debugf("set hijack reply, conn = %d, id = %d, code = %d", s.proxy.readCallbacks.Connection().ID(), s.ID, code)
+	s.logger.Errorf("set hijack reply, conn = %d, id = %d, code = %d", s.proxy.readCallbacks.Connection().ID(), s.ID, code)
 	if headers == nil {
 		s.logger.Warnf("hijack with no headers, conn = %d, id = %d", s.proxy.readCallbacks.Connection().ID(), s.ID)
 		raw := make(map[string]string, 5)
@@ -1014,6 +1029,7 @@ func (s *downStream) sendHijackReply(code int, headers types.HeaderMap) {
 	s.requestInfo.SetResponseCode(code)
 
 	headers.Set(types.HeaderStatus, strconv.Itoa(code))
+	atomic.StoreUint32(&s.reuseBuffer, 0)
 	s.appendHeaders(headers, true)
 }
 
@@ -1028,6 +1044,7 @@ func (s *downStream) sendHijackReplyWithBody(code int, headers types.HeaderMap, 
 	}
 	s.requestInfo.SetResponseCode(code)
 	headers.Set(types.HeaderStatus, strconv.Itoa(code))
+	atomic.StoreUint32(&s.reuseBuffer, 0)
 	s.appendHeaders(headers, false)
 	data := buffer.NewIoBufferString(body)
 	s.appendData(data, true)
@@ -1036,9 +1053,11 @@ func (s *downStream) sendHijackReplyWithBody(code int, headers types.HeaderMap, 
 func (s *downStream) cleanUp() {
 	// reset upstream request
 	// if a downstream filter ends downstream before send to upstream, upstreamRequest will be nil
-	if s.upstreamRequest != nil {
-		s.upstreamRequest.requestSender = nil
-	}
+	/*
+		if s.upstreamRequest != nil {
+			s.upstreamRequest.requestSender = nil
+		}
+	*/
 
 	// reset retry state
 	// if  a downstream filter ends downstream before send to upstream, retryState will be nil
@@ -1118,6 +1137,9 @@ func (s *downStream) giveStream() {
 	if atomic.LoadUint32(&s.upstreamReset) == 1 || atomic.LoadUint32(&s.downstreamReset) == 1 {
 		return
 	}
+
+	s.logger.Debugf("downStream giveStream %p %+v", s, s)
+
 	// reset downstreamReqBuf
 	if s.downstreamReqDataBuf != nil {
 		if e := buffer.PutIoBuffer(s.downstreamReqDataBuf); e != nil {
@@ -1129,10 +1151,56 @@ func (s *downStream) giveStream() {
 	if ctx := buffer.PoolContext(s.context); ctx != nil {
 		ctx.Give()
 	}
-
 }
 
 // check if proxy process done
 func (s *downStream) processDone() bool {
-	return s.upstreamProcessDone || atomic.LoadUint32(&s.downstreamReset) == 1
+	return s.upstreamProcessDone || atomic.LoadUint32(&s.downstreamReset) == 1 || atomic.LoadUint32(&s.upstreamReset) == 1
+}
+
+func (s *downStream) sendNotify() {
+	select {
+	case s.notify <- struct{}{}:
+	default:
+	}
+}
+
+func (s *downStream) waitNotify(id uint32) bool {
+	if s.ID != id {
+		return false
+	}
+	s.logger.Debugf("waitNotify begin %p %d", s, s.ID)
+	select {
+	case <-s.notify:
+	}
+	return s.processNotify(id)
+}
+
+func (s *downStream) processNotify(id uint32) bool {
+	if s.ID != id {
+		return false
+	}
+	s.logger.Debugf("processNotify begin %p %d", s, s.ID)
+	if atomic.LoadUint32(&s.downstreamCleaned) == 1 {
+		return false
+	}
+
+	b := true
+	if atomic.LoadUint32(&s.upstreamReset) == 1 {
+		s.logger.Errorf("processNotify upstreamReset downStream id: %d", s.ID)
+		s.onUpstreamReset(s.resetReason)
+		b = false
+	}
+
+	if atomic.LoadUint32(&s.downstreamReset) == 1 {
+		s.logger.Errorf("processNotify downstreamReset downStream id: %d", s.ID)
+		s.ResetStream(s.resetReason)
+		b = false
+	}
+
+	if s.upstreamProcessDone {
+		b = false
+	}
+
+	return b
 }
