@@ -83,7 +83,6 @@ func (r *upstreamRequest) OnResetStream(reason types.StreamResetReason) {
 	/*
 		r.requestSender = nil
 	*/
-	r.downStream.upstreamProcessDone = true
 
 	if !r.setupRetry {
 		// todo: check if we get a reset on encode request headers. e.g. send failed
@@ -110,6 +109,9 @@ func (r *upstreamRequest) endStream() {
 }
 
 func (r *upstreamRequest) OnDecode(ctx context.Context, headers types.HeaderMap, data types.IoBuffer, trailers types.HeaderMap) {
+	if r.downStream.processDone() {
+		return
+	}
 
 	r.endStream()
 

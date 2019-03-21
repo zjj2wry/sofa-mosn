@@ -825,6 +825,8 @@ func (s *downStream) onUpstreamReset(reason types.StreamResetReason) {
 	if s.downstreamResponseStarted {
 		s.resetStream()
 	} else {
+		s.upstreamProcessDone = true
+
 		// send err response if response not started
 		var code int
 
