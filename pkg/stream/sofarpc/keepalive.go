@@ -164,9 +164,7 @@ func (kp *sofaRPCKeepAlive) HandleSuccess(id uint64) {
 }
 
 func (kp *sofaRPCKeepAlive) OnDecode(ctx context.Context, headers types.HeaderMap, data types.IoBuffer, trailers types.HeaderMap) {
-	if ack, ok := headers.(sofarpc.SofaRpcCmd); ok {
-		kp.HandleSuccess(ack.RequestID())
-	}
+	kp.OnReceiveHeaders(ctx, headers, true)
 }
 
 // StreamReceiver Implementation

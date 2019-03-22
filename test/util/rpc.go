@@ -117,6 +117,7 @@ func (c *RPCClient) SendRequestWithData(in string) {
 }
 
 func (c *RPCClient) OnDecode(ctx context.Context, headers types.HeaderMap, data types.IoBuffer, trailers types.HeaderMap) {
+	c.OnReceiveHeaders(ctx, headers, true)
 }
 func (c *RPCClient) OnReceiveData(context context.Context, data types.IoBuffer, endStream bool) {
 }
