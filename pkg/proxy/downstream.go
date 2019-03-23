@@ -1168,7 +1168,7 @@ func (s *downStream) sendNotify() {
 }
 
 func (s *downStream) waitNotify(id uint32) bool {
-	if s.ID != id {
+	if !s.processNotify(id) {
 		return false
 	}
 	s.logger.Debugf("waitNotify begin %p %d", s, s.ID)
@@ -1183,9 +1183,6 @@ func (s *downStream) processNotify(id uint32) bool {
 		return false
 	}
 	s.logger.Debugf("processNotify begin %p %d", s, s.ID)
-	if atomic.LoadUint32(&s.downstreamCleaned) == 1 {
-		return false
-	}
 
 	b := true
 	if atomic.LoadUint32(&s.upstreamReset) == 1 {
@@ -1197,6 +1194,10 @@ func (s *downStream) processNotify(id uint32) bool {
 	if atomic.LoadUint32(&s.downstreamReset) == 1 {
 		s.logger.Errorf("processNotify downstreamReset downStream id: %d", s.ID)
 		s.ResetStream(s.resetReason)
+		b = false
+	}
+
+	if atomic.LoadUint32(&s.downstreamCleaned) == 1 {
 		b = false
 	}
 
